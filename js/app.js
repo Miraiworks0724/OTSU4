@@ -11,6 +11,9 @@
 
   const SUBJ_KEYS = ['all', 'houki', 'butsuka', 'seishou'];
   const subjLabel = (k) => (k === 'all' ? '全科目' : O.SUBJECTS[k].short);
+  const freqLabel = (f) => (f <= 1 ? 'すべて' : f === 5 ? '★5のみ' : `★${f}以上`);
+  /** 現在の出題範囲（科目×出題頻度）に入る分野の数 */
+  const topicCount = (subject, minFreq) => Object.values(O.TOPICS).filter((t) => (subject === 'all' || t.subject === subject) && t.freq >= minFreq).length;
   const pct = (c, n) => (n ? Math.round((c / n) * 100) : 0);
 
   function go(screen) {
@@ -105,7 +108,7 @@
 
   function questionBody(q) {
     const topic = O.TOPICS[q.topic];
-    let html = `<div class="badges"><span class="badge ${q.subject}">${esc(O.SUBJECTS[q.subject].short)}</span><span class="badge ghost">${esc(topic.name)}</span></div>`;
+    let html = `<div class="badges"><span class="badge ${q.subject}">${esc(O.SUBJECTS[q.subject].short)}</span><span class="badge ghost">${esc(topic.name)}</span><span class="badge freq" title="出題頻度: ${O.FREQ_LABELS[topic.freq]}">${O.stars(topic.freq)}</span></div>`;
     html += `<p class="stem">${esc(q.stem)}</p>`;
     if (q.list) html += `<ol class="stmts">${q.list.map((s) => `<li><b>${s.label}</b><span>${esc(s.t)}</span></li>`).join('')}</ol>`;
     return html;
@@ -135,6 +138,11 @@
           <div class="seg" role="radiogroup" aria-label="出題範囲">
             ${SUBJ_KEYS.map((k) => `<button role="radio" aria-checked="${d.settings.subject === k}" class="${d.settings.subject === k ? 'on' : ''}" data-act="subject" data-k="${k}">${subjLabel(k)}</button>`).join('')}
           </div>
+          <div class="field-h">出題頻度で絞り込む <span class="muted small">（${topicCount(d.settings.subject, d.settings.minFreq)}分野から出題）</span></div>
+          <div class="seg freq-seg" role="radiogroup" aria-label="出題頻度">
+            ${[1, 2, 3, 4, 5].map((f) => `<button role="radio" aria-checked="${d.settings.minFreq === f}" class="${d.settings.minFreq === f ? 'on' : ''}" data-act="freq" data-f="${f}">${freqLabel(f)}</button>`).join('')}
+          </div>
+          <p class="muted small freq-help">★5 ほぼ毎回出る ／ ★4 よく出る ／ ★3 ときどき出る ／ ★2 たまに出る</p>
           <label class="toggle"><input type="checkbox" data-act="weak" ${d.settings.weak ? 'checked' : ''}><span></span>苦手な分野を優先して出題する</label>
           <button class="btn primary" data-act="start-practice">準備モードを始める</button>
         </section>
@@ -177,7 +185,7 @@
       p.q = p.queue.shift();
       return;
     }
-    p.q = O.nextPractice({ subject: store.data.settings.subject, weak: store.data.settings.weak, recentPids: p.recentPids, recentSigs: p.recentSigs });
+    p.q = O.nextPractice({ subject: store.data.settings.subject, weak: store.data.settings.weak, minFreq: store.data.settings.minFreq, recentPids: p.recentPids, recentSigs: p.recentSigs });
     p.recentPids.push(p.q.pid);
     if (p.recentPids.length > 5) p.recentPids.shift();
     p.recentSigs.push(p.q.sig);
@@ -185,7 +193,8 @@
   }
   function renderPractice() {
     const p = S.practice;
-    const title = p.review ? '復習モード' : `準備モード・${subjLabel(store.data.settings.subject)}`;
+    const st = store.data.settings;
+    const title = p.review ? '復習モード' : `準備モード・${subjLabel(st.subject)}${st.minFreq > 1 ? '・' + freqLabel(st.minFreq) : ''}`;
     const head = `<header class="bar"><button class="icon-btn" data-act="home" aria-label="終了">✕</button><div class="bar-title">${title}</div><div class="bar-score">${p.c}/${p.n}${p.n ? `<small>${pct(p.c, p.n)}%</small>` : ''}</div></header>`;
     if (!p.q) {
       app.innerHTML = `${head}<main class="wrap"><section class="card center"><h2>復習完了</h2><p class="muted">間違えた問題をすべて解き終わりました（正解した問題は復習リストから外れます）。</p><button class="btn primary" data-act="home">ホームへ</button></section></main>`;
@@ -385,7 +394,7 @@
       const ids = Object.keys(O.TOPICS).filter((t) => O.TOPICS[t].subject === s && match(t));
       if (!ids.length) return '';
       return `<h3 class="sec-h">${esc(O.SUBJECTS[s].name)}</h3>${ids
-        .map((id) => `<details class="nt" ${f ? 'open' : ''}><summary>${esc(O.NOTES[id].title)}</summary>${renderBody(O.NOTES[id].body)}</details>`)
+        .map((id) => `<details class="nt" ${f ? 'open' : ''}><summary>${esc(O.NOTES[id].title)} <span class="stars" title="出題頻度: ${O.FREQ_LABELS[O.TOPICS[id].freq]}">${O.stars(O.TOPICS[id].freq)}</span></summary>${renderBody(O.NOTES[id].body)}</details>`)
         .join('')}`;
     }).join('');
     const subIds = O.SUBSTANCES.map((s) => 'sub_' + s.id).filter(match);
@@ -427,9 +436,9 @@
         </section>
         <section class="card">
           <h2>分野別（苦手な順）</h2>
-          <div class="tbl-wrap"><table class="stats"><thead><tr><th>分野</th><th>回答</th><th>正答率</th></tr></thead><tbody>
+          <div class="tbl-wrap"><table class="stats"><thead><tr><th>分野</th><th>頻度</th><th>回答</th><th>正答率</th></tr></thead><tbody>
             ${rows
-              .map(({ t, s }) => `<tr><td><span class="dot ${O.TOPICS[t].subject}"></span>${esc(O.TOPICS[t].name)}</td><td>${s.n}</td><td class="${s.n ? (pct(s.c, s.n) >= 60 ? 'txt-ok' : 'txt-ng') : 'muted'}">${s.n ? pct(s.c, s.n) + '%' : '未'}</td></tr>`)
+              .map(({ t, s }) => `<tr><td><span class="dot ${O.TOPICS[t].subject}"></span>${esc(O.TOPICS[t].name)}</td><td class="stars">${O.stars(O.TOPICS[t].freq)}</td><td>${s.n}</td><td class="${s.n ? (pct(s.c, s.n) >= 60 ? 'txt-ok' : 'txt-ng') : 'muted'}">${s.n ? pct(s.c, s.n) + '%' : '未'}</td></tr>`)
               .join('')}
           </tbody></table></div>
         </section>
@@ -460,6 +469,11 @@
     home: () => go('home'),
     subject: (el) => {
       store.data.settings.subject = el.dataset.k;
+      store.save();
+      render();
+    },
+    freq: (el) => {
+      store.data.settings.minFreq = Number(el.dataset.f);
       store.save();
       render();
     },

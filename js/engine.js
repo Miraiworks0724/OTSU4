@@ -25,7 +25,10 @@
   /** 準備モード: 次の問題 */
   O.nextPractice = function (opts) {
     const { subject, weak, recentPids, recentSigs } = opts;
-    const topics = Object.values(O.TOPICS).filter((t) => (subject === 'all' || t.subject === subject) && O.byTopic[t.id]);
+    const minFreq = opts.minFreq || 1;
+    let topics = Object.values(O.TOPICS).filter((t) => (subject === 'all' || t.subject === subject) && O.byTopic[t.id]);
+    const byFreq = topics.filter((t) => t.freq >= minFreq);
+    if (byFreq.length) topics = byFreq;
     const perSubject = {};
     topics.forEach((t) => (perSubject[t.subject] = (perSubject[t.subject] || 0) + 1));
     const stats = O.store.data.topics;

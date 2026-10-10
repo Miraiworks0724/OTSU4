@@ -102,6 +102,20 @@ for (let i = 0; i < 500; i++) {
   O.store.record(q, Math.random() < 0.5);
 }
 
+// 6. 出題頻度の絞り込み
+Object.values(O.TOPICS).forEach((t) => {
+  if (!(t.freq >= 1 && t.freq <= 5)) fail(`topic ${t.id} has invalid freq ${t.freq}`);
+});
+['all', 'houki', 'butsuka', 'seishou'].forEach((subject) => {
+  for (let f = 1; f <= 5; f++) {
+    for (let i = 0; i < 60; i++) {
+      const q = O.nextPractice({ subject, weak: i % 2 === 0, minFreq: f, recentPids: [], recentSigs: [] });
+      if (O.TOPICS[q.topic].freq < f) fail(`minFreq ${f}: got ${q.topic}`);
+      if (subject !== 'all' && q.subject !== subject) fail(`subject ${subject}: got ${q.subject}`);
+    }
+  }
+});
+
 const totalVariants = Object.values(counts).reduce((a, b) => a + b, 0);
 console.log(`providers: ${O.PROVIDERS.length}, banks: ${O.BANKS.length}, statements: ${O.BANKS.reduce((a, b) => a + b.items.length, 0)}, substances: ${O.SUBSTANCES.length}`);
 console.log(`distinct questions seen in ${N} draws/provider: ${totalVariants}`);

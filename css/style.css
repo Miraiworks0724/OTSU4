@@ -340,3 +340,13 @@ table.stats td:nth-child(2), table.stats td:nth-child(3) { text-align: right; wh
 .review > *, .rv > summary > * { min-width: 0; }
 .rv > summary .sum { flex: 1; }
 .rv-body { overflow-wrap: anywhere; }
+
+/* 出題頻度 */
+.field-h { font-size: 0.9rem; font-weight: 700; margin-top: 4px; }
+.freq-seg { margin-top: 6px; }
+.freq-seg { display: grid; grid-template-columns: repeat(5, 1fr); }
+.freq-seg button { min-width: 0; font-size: 0.8rem; padding: 8px 2px; white-space: nowrap; }
+.freq-help { margin: -4px 0 10px; }
+.badge.freq, .stars { color: #d39b00; letter-spacing: 0.05em; white-space: nowrap; }
+.badge.freq { background: transparent; border: 1px solid var(--line); font-weight: 500; }
+table.stats td.stars { font-size: 0.75rem; }

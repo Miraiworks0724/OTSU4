@@ -10,14 +10,16 @@
     wrong: [],
     history: [],
     exam: null,
-    settings: { subject: 'all', weak: true },
+    settings: { subject: 'all', weak: true, minFreq: 1 },
   });
 
   function load() {
     try {
       const raw = window.localStorage.getItem(KEY);
       if (!raw) return blank();
-      return Object.assign(blank(), JSON.parse(raw));
+      const d = Object.assign(blank(), JSON.parse(raw));
+      d.settings = Object.assign(blank().settings, d.settings);
+      return d;
     } catch (e) {
       return blank();
     }
