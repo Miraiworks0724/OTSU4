@@ -1,0 +1,12 @@
+{
+  "name": "乙4 合格トレーナー",
+  "short_name": "乙4トレーナー",
+  "description": "危険物取扱者 乙種第4類の試験対策",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f4f0",
+  "theme_color": "#d9480f",
+  "lang": "ja",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -1,0 +1,107 @@
+/* 科目・出題分野・本試験の出題構成 */
+(function () {
+  'use strict';
+  const O = window.OTSU;
+
+  O.SUBJECTS = {
+    houki: { name: '危険物に関する法令', short: '法令', n: 15, pass: 9 },
+    butsuka: { name: '基礎的な物理学及び基礎的な化学', short: '物理・化学', n: 10, pass: 6 },
+    seishou: { name: '危険物の性質並びにその火災予防及び消火の方法', short: '性質・消火', n: 10, pass: 6 },
+  };
+  O.SUBJECT_ORDER = ['houki', 'butsuka', 'seishou'];
+  O.EXAM_MINUTES = 120;
+
+  /* 分野: [科目, 名称] */
+  const T = {
+    h_def: ['houki', '危険物の定義・類別'],
+    h_hinmei: ['houki', '第4類の品名'],
+    h_shitei: ['houki', '指定数量・倍数計算'],
+    h_shisetsu: ['houki', '製造所等の区分'],
+    h_tetsuzuki: ['houki', '許可・届出等の手続き'],
+    h_menjo: ['houki', '危険物取扱者・免状'],
+    h_koshu: ['houki', '保安講習'],
+    h_hoan: ['houki', '保安監督者・統括管理者・施設保安員'],
+    h_yobo: ['houki', '予防規程'],
+    h_tenken: ['houki', '定期点検'],
+    h_kyori: ['houki', '保安距離・保有空地'],
+    h_kijun: ['houki', '位置・構造・設備の基準'],
+    h_kyuyu: ['houki', '給油取扱所'],
+    h_shoka: ['houki', '消火設備・警報設備'],
+    h_hyoshiki: ['houki', '標識・掲示板'],
+    h_chozo: ['houki', '貯蔵・取扱いの基準'],
+    h_unpan: ['houki', '運搬の基準'],
+    h_iso: ['houki', '移送の基準'],
+    h_meirei: ['houki', '措置命令・許可の取消し等'],
+
+    b_busshitsu: ['butsuka', '物質の変化と分類'],
+    b_netsu: ['butsuka', '熱（比熱・熱の移動・膨張）'],
+    b_jotai: ['butsuka', '沸点・蒸気圧・比重'],
+    b_seidenki: ['butsuka', '静電気'],
+    b_kagaku: ['butsuka', '化学の基礎（酸化還元・酸塩基・金属・有機）'],
+    b_nensho: ['butsuka', '燃焼の基礎'],
+    b_inka: ['butsuka', '引火点・発火点・燃焼範囲'],
+    b_shizen: ['butsuka', '自然発火・粉じん爆発'],
+    b_shoka: ['butsuka', '消火の理論・消火剤'],
+
+    s_rui: ['seishou', '第1類〜第6類の性質'],
+    s_kyotsu: ['seishou', '第4類に共通する性状'],
+    s_yobo: ['seishou', '第4類の火災予防'],
+    s_shoka: ['seishou', '第4類の消火方法'],
+    s_tokushu: ['seishou', '特殊引火物'],
+    s_dai1: ['seishou', '第1石油類'],
+    s_alcohol: ['seishou', 'アルコール類'],
+    s_dai2: ['seishou', '第2石油類'],
+    s_dai3: ['seishou', '第3・第4石油類・動植物油類'],
+    s_jiko: ['seishou', '事故事例と防止対策'],
+  };
+  O.TOPICS = {};
+  Object.keys(T).forEach((k) => (O.TOPICS[k] = { id: k, subject: T[k][0], name: T[k][1] }));
+
+  /*
+   * 本試験の出題構成（過去の出題傾向から、各枠で出やすい分野を候補として並べたもの）
+   * 各枠につき候補の中から1分野を選んで出題する。
+   */
+  O.EXAM_BLUEPRINT = {
+    houki: [
+      ['h_def', 'h_hinmei'],
+      ['h_shitei'],
+      ['h_shisetsu', 'h_kijun'],
+      ['h_tetsuzuki'],
+      ['h_menjo'],
+      ['h_koshu'],
+      ['h_hoan'],
+      ['h_yobo', 'h_tenken'],
+      ['h_kyori'],
+      ['h_kijun', 'h_kyuyu'],
+      ['h_kyuyu', 'h_hyoshiki'],
+      ['h_shoka'],
+      ['h_chozo'],
+      ['h_unpan'],
+      ['h_iso', 'h_meirei'],
+    ],
+    butsuka: [
+      ['b_busshitsu'],
+      ['b_netsu'],
+      ['b_jotai', 'b_netsu'],
+      ['b_seidenki'],
+      ['b_kagaku'],
+      ['b_nensho'],
+      ['b_inka'],
+      ['b_shizen', 'b_inka'],
+      ['b_shoka'],
+      ['b_shoka', 'b_nensho'],
+    ],
+    seishou: [
+      ['s_rui'],
+      ['s_kyotsu'],
+      ['s_yobo', 's_jiko'],
+      ['s_shoka'],
+      ['s_tokushu'],
+      ['s_dai1'],
+      ['s_alcohol'],
+      ['s_dai2'],
+      ['s_dai3'],
+      ['s_dai1', 's_dai2', 's_dai3', 's_tokushu', 's_jiko'],
+    ],
+  };
+})();
