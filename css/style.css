@@ -350,3 +350,4 @@ table.stats td:nth-child(2), table.stats td:nth-child(3) { text-align: right; wh
 .badge.freq, .stars { color: #d39b00; letter-spacing: 0.05em; white-space: nowrap; }
 .badge.freq { background: transparent; border: 1px solid var(--line); font-weight: 500; }
 table.stats td.stars { font-size: 0.75rem; }
+.fine a { color: inherit; }

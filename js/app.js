@@ -164,7 +164,7 @@
           <button class="tile" data-act="stats"><b>成績</b><span>分野別の正答率</span></button>
         </section>
 
-        <p class="fine">問題は過去の出題傾向（頻出テーマ・出題形式）をもとに作成したオリジナル問題です。実際の試験問題は公開されていないため、本番と同一の問題ではありません。</p>
+        <p class="fine">問題は、消防試験研究センターが公開している過去問と一般的な出題傾向を分析して作成したオリジナル問題です（公開問題そのものは収録していません）。公式の過去問は<a href="https://www.shoubo-shiken.or.jp/kikenbutsu/exercise.html" target="_blank" rel="noopener">消防試験研究センターのページ</a>で見られます。</p>
       </main>`;
   }
 

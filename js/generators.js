@@ -69,6 +69,33 @@
 
   /** 正誤問題（誤っているもの／正しいもの／いくつあるか） */
   function statementQuestion(p, items, stemHead, mode, extraNotes, exp) {
+    if (mode === 'combo') {
+      // 本試験の「A〜Dのうち、誤っているもののみをすべて掲げているものはどれか」形式
+      const askFalse = Math.random() < 0.6;
+      const labels = ['A', 'B', 'C', 'D'];
+      const key = (arr) => arr.join('、');
+      for (const nTarget of shuffle([1, 2, 2, 3])) {
+        const nT = askFalse ? 4 - nTarget : nTarget;
+        const sel = selectStatements(items, nT, 4 - nT);
+        if (!sel) continue;
+        const list = sel.map((s, i) => ({ label: labels[i], t: s.t, ok: s.ok, fix: s.fix || '' }));
+        const target = list.filter((x) => (askFalse ? !x.ok : x.ok)).map((x) => x.label);
+        const subsets = [];
+        for (let m = 1; m < 16; m++) subsets.push(labels.filter((_, i) => m & (1 << i)));
+        const others = shuffle(subsets.filter((a) => key(a) !== key(target))).sort((a, b) => Math.abs(a.length - target.length) - Math.abs(b.length - target.length));
+        const opts = [target].concat(others.slice(0, 4)).sort((a, b) => (key(a) < key(b) ? -1 : 1));
+        const word = askFalse ? '誤っているもの' : '正しいもの';
+        return build(p, {
+          stem: `${stemHead}、次のA〜Dのうち、${word}のみをすべて掲げているものはどれか。`,
+          list,
+          order: 'fixed',
+          choices: opts.map((a) => ({ t: key(a), ok: key(a) === key(target) })),
+          exp: `${word}は ${key(target)}。` + (exp ? '\n' + exp : ''),
+          notes: extraNotes,
+        });
+      }
+      mode = 'neg';
+    }
     if (mode === 'count') {
       const askTrue = Math.random() < 0.6;
       for (const k of shuffle([1, 2, 3, 4])) {
@@ -106,6 +133,7 @@
     if (ok(4, 1)) m.push(['neg', 5]);
     if (ok(1, 4)) m.push(['pos', 3]);
     if (items.length >= 6 && (ok(2, 3) || ok(3, 2))) m.push(['count', 1.5]);
+    if (items.length >= 6 && (ok(2, 2) || ok(3, 1) || ok(1, 3))) m.push(['combo', 1.5]);
     return m;
   }
   const chooseMode = (modes) => O.weightedPick(modes, (m) => m[1])[0];
@@ -122,8 +150,8 @@
   O.substanceStatements = function (s) {
     const g = O.GROUPS[s.g];
     const items = [];
-    s.facts.forEach((x) => items.push({ ok: true, t: x }));
-    s.myths.forEach((m) => items.push({ ok: false, t: m[0], fix: m[1] }));
+    s.facts.forEach((x) => items.push(Array.isArray(x) ? { ok: true, t: x[0], k: x[1] } : { ok: true, t: x }));
+    s.myths.forEach((m) => items.push({ ok: false, t: m[0], fix: m[1], k: m[2] }));
     if (s.sol === 'yes') {
       items.push({ ok: true, t: '水によく溶ける', k: 'sol' }, { ok: false, t: '水に溶けない', fix: '水によく溶ける（水溶性）', k: 'sol' });
     } else if (s.sol === 'no') {
@@ -160,7 +188,7 @@
     reg({
       id: 'sub_' + topic,
       topic,
-      w: 5,
+      w: 7,
       make() {
         const s = pick(subs);
         const items = O.substanceStatements(s);
@@ -215,7 +243,7 @@
         const choices = chosen.map((pr, i) => {
           const isWrong = wrongIdx.includes(i);
           let b = pr[1];
-          if (isWrong) b = pick(domain.filter((x) => x !== pr[1]));
+          if (isWrong) b = pick(domain.filter((x) => x !== pr[1] && !(pr[2] || []).includes(x)));
           return {
             t: `${pr[0]}${sep}${b}`,
             ok: neg ? isWrong : !isWrong,
@@ -288,6 +316,195 @@
     }
     return out;
   }
+
+  /* ───────── 6.「すべて該当する組合せ」問題（本試験の「〜のみの組合せとして正しいもの」形式） ───────── */
+  function regCombo(d) {
+    reg({
+      id: d.id,
+      topic: d.topic,
+      w: d.w || 2,
+      make() {
+        const norm = (x) => (Array.isArray(x) ? x : [x, '']);
+        const yes = d.yes.map(norm);
+        const no = d.no.map(norm);
+        const k = d.k;
+        const keyOf = (arr) => arr.map((x) => x[0]).sort().join('|');
+        const correct = sample(yes, k);
+        const seen = new Set([keyOf(correct)]);
+        const opts = [{ items: correct, ok: true }];
+        for (let i = 0; opts.length < 5 && i < 50; i++) {
+          const c = shuffle(sample(yes, k - 1).concat(sample(no, 1)));
+          if (seen.has(keyOf(c))) continue;
+          seen.add(keyOf(c));
+          opts.push({ items: c, ok: false });
+        }
+        return build(this, {
+          stem: d.stem,
+          choices: opts.map((o) => ({
+            t: o.items.map((x) => x[0]).join('　'),
+            ok: o.ok,
+            mk: o.ok ? '○' : '×',
+            why: o.ok ? 'すべて' + d.yesLabel : o.items.filter((x) => no.includes(x)).map((x) => `「${x[0]}」は${d.noLabel}${x[1] ? '（' + x[1] + '）' : ''}`).join('、'),
+          })),
+          exp: d.exp,
+        });
+      },
+    });
+  }
+
+  /* ═════════════ 公式公開問題の分析から追加した出題 ═════════════ */
+  regSet({
+    id: 'set_4rui_hinmei', topic: 'h_hinmei', w: 2,
+    stemNeg: '法別表第一に掲げる第4類の危険物の品名に該当しないものは、次のうちどれか。',
+    stemPos: '次のうち、第4類の危険物の品名に該当するものはどれか。',
+    yesLabel: '第4類の品名', noLabel: '第4類の品名ではない',
+    yes: ['特殊引火物', '第1石油類', 'アルコール類', '第2石油類', '第3石油類', '第4石油類', '動植物油類'],
+    no: [['アルキルアルミニウム', '第3類'], ['硝酸エステル類', '第5類'], ['過塩素酸塩類', '第1類'], ['硫化りん', '第2類'], ['有機過酸化物', '第5類'], ['金属粉', '第2類'], ['黄りん', '第3類'], ['塩素酸塩類', '第1類']],
+  });
+  regCombo({
+    id: 'combo_okugai', topic: 'h_shisetsu', k: 3, w: 3,
+    stem: '法令上、屋外貯蔵所に貯蔵できる危険物のみの組合せとして、次のうち正しいものはどれか。',
+    yesLabel: '屋外貯蔵所に貯蔵できる', noLabel: '屋外貯蔵所に貯蔵できない',
+    yes: ['トルエン', '重油', 'アルコール類', '硫黄', '軽油', '灯油', '動植物油類', 'ギヤー油', 'シリンダー油', 'クレオソート油', '引火性固体（引火点0℃以上のもの）', '酢酸'],
+    no: [['ジエチルエーテル', '特殊引火物'], ['二硫化炭素', '特殊引火物'], ['アセトン', '引火点0℃未満の第1石油類'], ['ガソリン', '引火点0℃未満の第1石油類'], ['ベンゼン', '引火点0℃未満の第1石油類'], ['アセトアルデヒド', '特殊引火物']],
+  });
+  regCombo({
+    id: 'combo_kyori', topic: 'h_kyori', k: 2, w: 3,
+    stem: '法令上、学校・病院等の建築物等から一定の距離（保安距離）を保たなければならない施設の組合せとして、次のうち正しいものはどれか。',
+    yesLabel: '保安距離が必要', noLabel: '保安距離は不要',
+    yes: ['製造所', '屋内貯蔵所', '屋外タンク貯蔵所', '屋外貯蔵所', '一般取扱所'],
+    no: ['屋内タンク貯蔵所', '地下タンク貯蔵所', '移動タンク貯蔵所', '給油取扱所', '第1種販売取扱所', '第2種販売取扱所', '簡易タンク貯蔵所'],
+  });
+  regSet({
+    id: 'set_5shu_all', topic: 'h_shoka', w: 2,
+    stemPos: '法令上、第5種の消火設備のうち、すべての類の危険物の消火に適応するものはどれか。',
+    yesLabel: 'すべての類に適応', noLabel: '適応しない類がある',
+    yes: ['乾燥砂', '膨張ひる石', '膨張真珠岩'],
+    no: ['りん酸塩類等の粉末を放射する消火器', '霧状の強化液を放射する消火器', '泡を放射する消火器', 'ハロゲン化物を放射する消火器', '二酸化炭素を放射する消火器', '水バケツ'],
+  });
+  reg({
+    id: 'g_menjo_shinsei', topic: 'h_menjo', w: 3,
+    make() {
+      const KA = ['交付した知事、または居住地もしくは勤務地を管轄する知事', '居住地を管轄する知事', '交付した知事', '居住地または勤務地を管轄する知事', '交付した知事または居住地を管轄する知事'];
+      const SA = ['交付した知事、または書換えをした知事', '交付した知事または居住地を管轄する知事', '交付した知事、または居住地もしくは勤務地を管轄する知事', '居住地または勤務地を管轄する知事', '書換えをした知事、または居住地を管轄する知事'];
+      const opts = [[0, 0]];
+      const seen = new Set(['0-0']);
+      while (opts.length < 5) {
+        const c = [ri(0, 4), ri(0, 4)];
+        if (!seen.has(c.join('-'))) {
+          seen.add(c.join('-'));
+          opts.push(c);
+        }
+      }
+      return build(this, {
+        stem: '法令上、免状の書換えの申請先と再交付の申請先の組合せとして、次のうち正しいものはどれか。',
+        choices: opts.map(([a, b]) => ({ t: `書換え：${KA[a]}／再交付：${SA[b]}`, ok: a === 0 && b === 0 })),
+        exp: `書換え → ${KA[0]}\n再交付 → ${SA[0]}（亡失した免状を発見したら10日以内に再交付を受けた知事へ提出）`,
+      });
+    },
+  });
+  regSet({
+    id: 'set_tenken_kiroku', topic: 'h_tenken', w: 2,
+    stemNeg: '法令に定める定期点検の点検記録に記載しなければならない事項として、定められていないものはどれか。',
+    yesLabel: '記載が必要', noLabel: '記載事項ではない',
+    yes: ['点検をした製造所等の名称', '点検の方法及び結果', '点検年月日', '点検を行った危険物取扱者等または点検に立ち会った危険物取扱者の氏名'],
+    no: ['点検を実施したことを市町村長等へ報告した年月日', '点検に要した費用', '製造所等の所有者の住所', '危険物保安監督者の免状番号'],
+  });
+  regSet({
+    id: 'set_hoankensa', topic: 'h_tenken', w: 2,
+    stemPos: '法令上、政令で定める規模以上のものが市町村長等の行う保安検査を受けなければならない製造所等はどれか。',
+    yesLabel: '保安検査の対象', noLabel: '保安検査の対象ではない',
+    yes: ['屋外タンク貯蔵所', '移送取扱所'],
+    no: ['地下タンク貯蔵所', '給油取扱所', '製造所', '移動タンク貯蔵所', '屋内貯蔵所', '一般取扱所'],
+  });
+  regPair({
+    id: 'pair_unpan_chui', topic: 'h_unpan', stem: '法令上、運搬容器の外部に表示する注意事項について、危険物の類との組合せとして', w: 3, sep: '…',
+    pairs: [
+      ['第1類（アルカリ金属の過酸化物等を除く）', '「火気・衝撃注意」「可燃物接触注意」'],
+      ['第2類（鉄粉・金属粉・マグネシウム・引火性固体を除く）', '「火気注意」'],
+      ['第3類の禁水性物品', '「禁水」'],
+      ['第4類', '「火気厳禁」', ['「火気厳禁」「衝撃注意」']],
+      ['第5類', '「火気厳禁」「衝撃注意」', ['「火気厳禁」']],
+      ['第6類', '「可燃物接触注意」', ['「火気・衝撃注意」「可燃物接触注意」']],
+    ],
+  });
+  reg({
+    id: 'g_self_color', topic: 'h_kyuyu', w: 2,
+    make() {
+      const C = [['ハイオクガソリン', '黄色'], ['レギュラーガソリン', '赤色'], ['軽油', '緑色'], ['灯油', '青色']];
+      const [fuel, color] = pick(C);
+      const what = fuel === '灯油' ? '灯油を取り扱うために顧客が使用する顧客用固定注油設備' : `${fuel}を取り扱うために顧客が使用する顧客用固定給油設備`;
+      return build(this, {
+        stem: `法令上、顧客に自ら給油等をさせる給油取扱所において、${what}に彩色を施す場合の色として、次のうち正しいものはどれか。`,
+        choices: ['赤色', '青色', '白色', '黄色', '緑色'].map((c) => ({ t: c, ok: c === color })),
+        order: 'fixed',
+        exp: 'ハイオク＝黄色、レギュラー＝赤色、軽油＝緑色、灯油＝青色',
+      });
+    },
+  });
+  reg({
+    id: 'g_nensho_jouken', topic: 'b_nensho', w: 3,
+    make() {
+      const BURN = [['静電気火花', '水素', '空気'], ['ライターの炎', 'プロパン', '空気'], ['電気火花', '一酸化炭素', '空気'], ['衝撃火花', '二硫化炭素', '酸素'], ['マッチの炎', 'メタン', '空気'], ['静電気火花', 'ガソリンの蒸気', '空気'], ['酸化熱', '天ぷらの揚げかす', '酸素'], ['電気火花', 'アセチレン', '酸素'], ['ライターの炎', '木材', '空気']];
+      const NONFUEL = ['ヘリウム', '窒素', '二酸化炭素', 'アルゴン', '水蒸気'];
+      const NONOX = ['窒素', '二酸化炭素', 'ヘリウム'];
+      const spoil = (tr) => {
+        const r = ri(0, 2);
+        if (r === 0 && tr[0] !== '酸化熱') return [[pick(['気化熱', '融解熱']), tr[1], tr[2]], '気化熱・融解熱は点火源にならない'];
+        if (r === 1) return [[tr[0], pick(NONFUEL), tr[2]], 'この物質は燃えない（可燃物がない）'];
+        return [[tr[0], tr[1], pick(NONOX)], '酸素供給源がない'];
+      };
+      const notBurn = Math.random() < 0.65;
+      const base = sample(BURN, 5);
+      const seen = new Set(base.map((tr) => tr.join(' … ')));
+      const choices = base.map((tr, i) => {
+        const odd = notBurn ? i === 0 : i !== 0;
+        if (!odd) return { t: tr.join(' … '), ok: i === 0, mk: '○', why: '燃焼の三要素がそろっている' };
+        let t2, why;
+        do [t2, why] = spoil(tr);
+        while (seen.has(t2.join(' … ')));
+        seen.add(t2.join(' … '));
+        return { t: t2.join(' … '), ok: i === 0, mk: '×', why };
+      });
+      return build(this, {
+        stem: `次の「点火源 … 可燃物 … 酸素供給源」の組合せのうち、燃焼が${notBurn ? '起こらない' : '起こる'}ものはどれか。`,
+        choices,
+        exp: '燃焼には可燃物・酸素供給源・点火源の3つが同時に必要。ヘリウム・窒素・二酸化炭素などは燃えず、酸素供給源にもならない。',
+      });
+    },
+  });
+  reg({
+    id: 'g_seiseinetsu', topic: 'b_kagaku', w: 2,
+    make() {
+      const H = 286, C = 394;
+      const [name, f, nc, nh, comb, eq] = pick([
+        ['プロパン', 'C₃H₈', 3, 4, 2219, 'C₃H₈ ＋ 5O₂ → 3CO₂ ＋ 4H₂O'],
+        ['メタン', 'CH₄', 1, 2, 890, 'CH₄ ＋ 2O₂ → CO₂ ＋ 2H₂O'],
+        ['エタン', 'C₂H₆', 2, 3, 1560, '2C₂H₆ ＋ 7O₂ → 4CO₂ ＋ 6H₂O'],
+        ['ブタン', 'C₄H₁₀', 4, 5, 2878, '2C₄H₁₀ ＋ 13O₂ → 8CO₂ ＋ 10H₂O'],
+      ]);
+      const ans = nc * C + nh * H - comb;
+      return build(this, {
+        stem: `水素（H₂）、炭素（C）、${name}（${f}）の燃焼熱がそれぞれ${H}kJ/mol、${C}kJ/mol、${comb.toLocaleString()}kJ/molであるとき、${name}の生成熱として正しいものはどれか。\nなお、完全燃焼の反応式は 2H₂ ＋ O₂ → 2H₂O、C ＋ O₂ → CO₂、${eq} である。`,
+        choices: numChoices(ans, shuffle([nc * C + nh * H + comb, comb - C - H, comb - ans, H + C + comb, ans * 2, nc * C + nh * H]), (v) => O.num(v, 0) + 'kJ/mol', 0),
+        order: 'num',
+        exp: `${name}を成分の単体から作る反応（${nc}C ＋ ${nh}H₂ → ${f}）の熱を、燃焼熱から求める（ヘスの法則）。\n生成熱 ＝ （炭素の燃焼熱 × ${nc} ＋ 水素の燃焼熱 × ${nh}）− ${name}の燃焼熱\n＝ (${C} × ${nc} ＋ ${H} × ${nh}) − ${comb} ＝ ${ans}kJ/mol`,
+      });
+    },
+  });
+  regPair({
+    id: 'pair_kannoki', topic: 'b_kagaku', stem: '次の有機化合物とそれに含まれる官能基との組合せとして', w: 3, sep: '　…　',
+    pairs: [
+      ['C₆H₅NH₂（アニリン）', 'アミノ基'],
+      ['C₂H₅OH（エタノール）', 'ヒドロキシ基'],
+      ['C₃H₇OH（プロパノール）', 'ヒドロキシ基'],
+      ['C₆H₅NO₂（ニトロベンゼン）', 'ニトロ基'],
+      ['CH₃COCH₃（アセトン）', 'カルボニル基（ケトン基）', ['アルデヒド基（ホルミル基）']],
+      ['CH₃COOH（酢酸）', 'カルボキシ基', ['カルボニル基（ケトン基）']],
+      ['CH₃CHO（アセトアルデヒド）', 'アルデヒド基（ホルミル基）', ['カルボニル基（ケトン基）']],
+      ['C₆H₅SO₃H（ベンゼンスルホン酸）', 'スルホ基'],
+    ],
+  });
 
   /* ═════════════ 法令 ═════════════ */
   regSet({
@@ -441,12 +658,14 @@
   });
 
   regSet({
-    id: 'set_kantoku', topic: 'h_hoan',
-    stemNeg: '法令上、次の製造所等のうち、危険物保安監督者を選任しなくてもよいものはどれか。',
-    yesLabel: '数量にかかわらず選任が必要', noLabel: '選任不要',
-    yes: ['製造所', '屋外タンク貯蔵所', '給油取扱所', '移送取扱所'],
-    no: ['移動タンク貯蔵所'],
+    id: 'set_kantoku', topic: 'h_hoan', w: 3,
+    stemPos: '法令上、危険物保安監督者を定めなければならない製造所等に該当するものはどれか。',
+    stemNeg: '法令上、危険物保安監督者を定めなくてもよい製造所等はどれか。',
+    yesLabel: '保安監督者が必要', noLabel: '保安監督者は不要',
+    yes: ['製造所', '屋外タンク貯蔵所', '給油取扱所', '移送取扱所', '指定数量の倍数が30を超える屋外貯蔵所', '指定数量の倍数が30を超える危険物を容器に詰め替える一般取扱所', 'ガソリンを貯蔵する屋内タンク貯蔵所'],
+    no: [['移動タンク貯蔵所', 'どんな場合も不要'], ['指定数量の倍数が30の屋外貯蔵所', '30を超えなければ不要'], ['引火点40℃以上の第4類の危険物のみを貯蔵する屋内タンク貯蔵所', ''], ['指定数量の倍数が30を超える、引火点40℃以上の第4類の危険物のみを取り扱う販売取扱所', ''], ['引火点40℃以上の第4類の危険物のみを指定数量の30倍以下貯蔵する屋内貯蔵所', ''], ['引火点40℃以上の第4類の危険物のみを貯蔵する簡易タンク貯蔵所', '']],
   });
+
   regSet({
     id: 'set_yobo', topic: 'h_yobo',
     stemPos: '法令上、次の製造所等のうち、予防規程を定めなければならないものはどれか。',
