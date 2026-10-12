@@ -188,7 +188,7 @@
     reg({
       id: 'sub_' + topic,
       topic,
-      w: 7,
+      w: 16, // 公式問題では性消10問のうち約半数が「〇〇の性状について」形式
       make() {
         const s = pick(subs);
         const items = O.substanceStatements(s);
