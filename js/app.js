@@ -13,7 +13,24 @@
   const subjLabel = (k) => (k === 'all' ? '全科目' : O.SUBJECTS[k].short);
   const freqLabel = (f) => (f <= 1 ? 'すべて' : f === 5 ? '★5のみ' : `★${f}以上`);
   /** 現在の出題範囲（科目×出題頻度）に入る分野の数 */
-  const topicCount = (subject, minFreq) => Object.values(O.TOPICS).filter((t) => (subject === 'all' || t.subject === subject) && t.freq >= minFreq).length;
+  const topicCount = (subject, minFreq) => {
+    O.setSources(store.data.settings.srcPractice);
+    return O.availableTopics(subject).filter((t) => t.freq >= minFreq).length;
+  };
+
+  /* 参照する媒体（出典） */
+  const SOURCES = [
+    ['o', '公式過去問題'],
+    ['b', '参考書例題「乙4すい〜っと合格」'],
+  ];
+  const SRC_SHORT = { o: '公式', b: '参考書' };
+  const srcSummary = (list) => (list.length ? list.map((x) => SRC_SHORT[x]).join('＋') + 'の分析から作った問題だけを出題' : 'チェックなし: 一般的な知識（Claudeが作成）から出題');
+  function sourceBox(key) {
+    const list = store.data.settings[key];
+    return `<fieldset class="srcbox"><legend>参照する媒体</legend>${SOURCES.map(
+      ([id, label]) => `<label class="check"><input type="checkbox" data-act="src" data-key="${key}" data-src="${id}" ${list.includes(id) ? 'checked' : ''}><span>${esc(label)}</span></label>`
+    ).join('')}<p class="muted small">${esc(srcSummary(list))}</p></fieldset>`;
+  }
   const pct = (c, n) => (n ? Math.round((c / n) * 100) : 0);
 
   function go(screen) {
@@ -108,7 +125,7 @@
 
   function questionBody(q) {
     const topic = O.TOPICS[q.topic];
-    let html = `<div class="badges"><span class="badge ${q.subject}">${esc(O.SUBJECTS[q.subject].short)}</span><span class="badge ghost">${esc(topic.name)}</span><span class="badge freq" title="出題頻度: ${O.FREQ_LABELS[topic.freq]}">${O.stars(topic.freq)}</span></div>`;
+    let html = `<div class="badges"><span class="badge ${q.subject}">${esc(O.SUBJECTS[q.subject].short)}</span><span class="badge ghost">${esc(topic.name)}</span>${(q.src || '').split('').filter((x) => SRC_SHORT[x]).map((x) => `<span class="badge src">${SRC_SHORT[x]}</span>`).join('')}<span class="badge freq" title="出題頻度: ${O.FREQ_LABELS[topic.freq]}">${O.stars(topic.freq)}</span></div>`;
     html += `<p class="stem">${esc(q.stem)}</p>`;
     if (q.list) html += `<ol class="stmts">${q.list.map((s) => `<li><b>${s.label}</b><span>${esc(s.t)}</span></li>`).join('')}</ol>`;
     return html;
@@ -143,6 +160,7 @@
             ${[1, 2, 3, 4, 5].map((f) => `<button role="radio" aria-checked="${d.settings.minFreq === f}" class="${d.settings.minFreq === f ? 'on' : ''}" data-act="freq" data-f="${f}">${freqLabel(f)}</button>`).join('')}
           </div>
           <p class="muted small freq-help">★5 ほぼ毎回出る ／ ★4 よく出る ／ ★3 ときどき出る ／ ★2 たまに出る</p>
+          ${sourceBox('srcPractice')}
           <label class="toggle"><input type="checkbox" data-act="weak" ${d.settings.weak ? 'checked' : ''}><span></span>苦手な分野を優先して出題する</label>
           <button class="btn primary" data-act="start-practice">準備モードを始める</button>
         </section>
@@ -154,6 +172,7 @@
             <li>制限時間 <b>2時間</b>（途中で採点もできます）</li>
             <li>合格基準: <b>各科目60%以上</b>（法令9問・物化6問・性消6問以上）</li>
           </ul>
+          ${sourceBox('srcExam')}
           ${ex ? `<button class="btn" data-act="resume-exam">中断した試験を再開（${exAnswered}/35 回答済み）</button>` : ''}
           <button class="btn primary exam" data-act="start-exam">${ex ? '新しく試験を始める' : '試験を開始する'}</button>
         </section>
@@ -185,7 +204,9 @@
       p.q = p.queue.shift();
       return;
     }
+    O.setSources(store.data.settings.srcPractice);
     p.q = O.nextPractice({ subject: store.data.settings.subject, weak: store.data.settings.weak, minFreq: store.data.settings.minFreq, recentPids: p.recentPids, recentSigs: p.recentSigs });
+    if (!p.q) return;
     p.recentPids.push(p.q.pid);
     if (p.recentPids.length > 5) p.recentPids.shift();
     p.recentSigs.push(p.q.sig);
@@ -196,6 +217,10 @@
     const st = store.data.settings;
     const title = p.review ? '復習モード' : `準備モード・${subjLabel(st.subject)}${st.minFreq > 1 ? '・' + freqLabel(st.minFreq) : ''}`;
     const head = `<header class="bar"><button class="icon-btn" data-act="home" aria-label="終了">✕</button><div class="bar-title">${title}</div><div class="bar-score">${p.c}/${p.n}${p.n ? `<small>${pct(p.c, p.n)}%</small>` : ''}</div></header>`;
+    if (!p.q && !p.review) {
+      app.innerHTML = `${head}<main class="wrap"><section class="card center"><h2>出題できる問題がありません</h2><p class="muted">選んだ科目・出題頻度・参照する媒体の組合せに合う問題がありません。ホームで条件を変えてください。</p><button class="btn primary" data-act="home">ホームへ</button></section></main>`;
+      return;
+    }
     if (!p.q) {
       app.innerHTML = `${head}<main class="wrap"><section class="card center"><h2>復習完了</h2><p class="muted">間違えた問題をすべて解き終わりました（正解した問題は復習リストから外れます）。</p><button class="btn primary" data-act="home">ホームへ</button></section></main>`;
       return;
@@ -238,7 +263,15 @@
   /* ───────── 試験モード ───────── */
   function startExam() {
     if (store.data.exam && !window.confirm('中断中の試験は破棄されます。新しい試験を始めますか？')) return;
-    store.data.exam = { qs: O.buildExam(), answers: Array(35).fill(null), flags: Array(35).fill(false), idx: 0, elapsed: 0, resumedAt: Date.now(), limit: O.EXAM_MINUTES * 60 * 1000 };
+    O.setSources(store.data.settings.srcExam);
+    let qs;
+    try {
+      qs = O.buildExam();
+    } catch (e) {
+      window.alert('選んだ媒体では35問をそろえられませんでした。参照する媒体を変えてください。');
+      return;
+    }
+    store.data.exam = { qs, srcs: store.data.settings.srcExam.slice(), answers: Array(35).fill(null), flags: Array(35).fill(false), idx: 0, elapsed: 0, resumedAt: Date.now(), limit: O.EXAM_MINUTES * 60 * 1000 };
     store.save();
     S.grid = false;
     go('exam');
@@ -343,7 +376,7 @@
     const g = O.gradeExam(ex);
     const used = Math.min(elapsed(ex), ex.limit);
     ex.qs.forEach((q, i) => store.record(q, ex.answers[i] === q.answer, { deferSave: true }));
-    store.data.history.unshift({ at: Date.now(), pass: g.pass, total: g.total, subjects: g.subjects, used });
+    store.data.history.unshift({ at: Date.now(), pass: g.pass, total: g.total, subjects: g.subjects, used, srcs: ex.srcs || [] });
     store.data.history = store.data.history.slice(0, 50);
     store.data.exam = null;
     store.save();
@@ -449,7 +482,7 @@
               ? `<ul class="hist">${d.history
                   .map((h) => {
                     const dt = new Date(h.at);
-                    return `<li><span class="tag ${h.pass ? 'ok' : 'ng'}">${h.pass ? '合格' : '不合格'}</span><span>${dt.getMonth() + 1}/${dt.getDate()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}</span><span class="muted">${O.SUBJECT_ORDER.map((s) => `${O.SUBJECTS[s].short} ${h.subjects[s].c}/${h.subjects[s].n}`).join('・')}</span></li>`;
+                    return `<li><span class="tag ${h.pass ? 'ok' : 'ng'}">${h.pass ? '合格' : '不合格'}</span><span>${dt.getMonth() + 1}/${dt.getDate()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}</span><span class="muted">${O.SUBJECT_ORDER.map((s) => `${O.SUBJECTS[s].short} ${h.subjects[s].c}/${h.subjects[s].n}`).join('・')}</span><span class="muted small">${h.srcs && h.srcs.length ? h.srcs.map((x) => SRC_SHORT[x]).join('＋') : '一般知識'}</span></li>`;
                   })
                   .join('')}</ul>`
               : '<p class="muted">まだ受験していません。</p>'
@@ -551,6 +584,16 @@
     if (fn) fn(el);
   });
   app.addEventListener('change', (e) => {
+    if (e.target.dataset.act === 'src') {
+      const { key, src } = e.target.dataset;
+      const set = new Set(store.data.settings[key]);
+      if (e.target.checked) set.add(src);
+      else set.delete(src);
+      store.data.settings[key] = SOURCES.map((x) => x[0]).filter((x) => set.has(x));
+      store.save();
+      render();
+      return;
+    }
     if (e.target.dataset.act === 'weak') {
       store.data.settings.weak = e.target.checked;
       store.save();

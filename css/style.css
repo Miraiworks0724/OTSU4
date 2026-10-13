@@ -198,8 +198,8 @@ h1, h2, h3, h4 { line-height: 1.35; margin: 0; }
 .badge.houki { background: var(--houki); }
 .badge.butsuka { background: var(--butsuka); }
 .badge.seishou { background: var(--seishou); }
-:root[data-theme='dark'] .badge:not(.ghost) { color: #111; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .badge:not(.ghost) { color: #111; } }
+:root[data-theme='dark'] .badge:not(.ghost):not(.src):not(.freq) { color: #111; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .badge:not(.ghost):not(.src):not(.freq) { color: #111; } }
 .badge.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
 .qno { font-weight: 800; font-size: 1.1rem; margin-bottom: 6px; display: flex; align-items: baseline; gap: 4px; }
 .qno small { color: var(--muted); font-weight: 400; }
@@ -351,3 +351,11 @@ table.stats td:nth-child(2), table.stats td:nth-child(3) { text-align: right; wh
 .badge.freq { background: transparent; border: 1px solid var(--line); font-weight: 500; }
 table.stats td.stars { font-size: 0.75rem; }
 .fine a { color: inherit; }
+
+/* 参照する媒体 */
+.srcbox { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px 6px; margin: 4px 0 12px; }
+.srcbox legend { font-size: 0.85rem; font-weight: 700; padding: 0 4px; }
+.check { display: flex; align-items: center; gap: 10px; padding: 6px 0; cursor: pointer; font-size: 0.92rem; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.srcbox p { margin: 4px 0 2px; }
+.badge.src { background: transparent; color: var(--accent); border: 1px solid var(--accent); }

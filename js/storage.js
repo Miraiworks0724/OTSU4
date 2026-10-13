@@ -10,7 +10,7 @@
     wrong: [],
     history: [],
     exam: null,
-    settings: { subject: 'all', weak: true, minFreq: 1 },
+    settings: { subject: 'all', weak: true, minFreq: 1, srcPractice: [], srcExam: [] },
   });
 
   function load() {

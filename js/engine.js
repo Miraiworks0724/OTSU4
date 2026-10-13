@@ -8,7 +8,8 @@
 
   /** 分野から1問作る（avoid に含まれるプロバイダーはできるだけ避ける） */
   O.makeFromTopic = function (topic, avoid) {
-    const all = O.byTopic[topic] || [];
+    const all = (O.byTopic[topic] || []).filter(O.providerAvailable);
+    if (!all.length) return null;
     let pool = all.filter((p) => !avoid || !avoid.has(p.id));
     if (!pool.length) pool = all;
     for (let i = 0; i < 8; i++) {
@@ -22,11 +23,17 @@
     return null;
   };
 
+  /** 現在の出典設定で、この分野から出題できるか */
+  O.topicAvailable = (topic) => (O.byTopic[topic] || []).some(O.providerAvailable);
+  /** 現在の出典設定で出題できる分野の一覧 */
+  O.availableTopics = (subject) => Object.values(O.TOPICS).filter((t) => (!subject || subject === 'all' || t.subject === subject) && O.topicAvailable(t.id));
+
   /** 準備モード: 次の問題 */
   O.nextPractice = function (opts) {
     const { subject, weak, recentPids, recentSigs } = opts;
     const minFreq = opts.minFreq || 1;
-    let topics = Object.values(O.TOPICS).filter((t) => (subject === 'all' || t.subject === subject) && O.byTopic[t.id]);
+    let topics = O.availableTopics(subject);
+    if (!topics.length) return null;
     const byFreq = topics.filter((t) => t.freq >= minFreq);
     if (byFreq.length) topics = byFreq;
     const perSubject = {};
@@ -46,7 +53,11 @@
       const q = O.makeFromTopic(t.id, new Set(recentPids));
       if (q && !recentSigs.includes(q.sig)) return q;
     }
-    return O.makeFromTopic(O.pick(topics).id);
+    for (let i = 0; i < 10; i++) {
+      const q = O.makeFromTopic(O.pick(topics).id);
+      if (q) return q;
+    }
+    return null;
   };
 
   /** 試験モード: 本番と同じ構成で35問 */
@@ -58,14 +69,19 @@
     O.SUBJECT_ORDER.forEach((subj) => {
       O.EXAM_BLUEPRINT[subj].forEach((slot) => {
         let q = null;
-        for (let i = 0; i < 25 && !q; i++) {
-          const c = O.makeFromTopic(O.pick(slot), usedP);
+        // 出典の設定でこの枠の分野が出せないときは、同じ科目の出題できる分野から選ぶ
+        let cands = slot.filter(O.topicAvailable);
+        if (!cands.length) cands = O.availableTopics(subj).map((t) => t.id);
+        if (!cands.length) throw new Error('no-topic:' + subj);
+        for (let i = 0; i < 40 && !q; i++) {
+          const c = O.makeFromTopic(O.pick(cands), i < 20 ? usedP : null);
           if (!c) continue;
           const stemKey = c.stem.split('、次の')[0];
           if (usedSig.has(c.sig) || (i < 15 && usedStem.has(stemKey))) continue;
           q = c;
         }
-        if (!q) q = O.makeFromTopic(slot[0]);
+        for (let i = 0; i < 20 && !q; i++) q = O.makeFromTopic(O.pick(cands));
+        if (!q) throw new Error('no-question:' + subj);
         usedP.add(q.pid);
         usedSig.add(q.sig);
         usedStem.add(q.stem.split('、次の')[0]);

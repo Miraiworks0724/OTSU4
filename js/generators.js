@@ -10,6 +10,19 @@
   const { pick, shuffle, sample, ri } = O;
   const P = (O.PROVIDERS = []);
   const reg = (p) => P.push(Object.assign({ w: 1 }, p));
+
+  /*
+   * 出典（参照する媒体）の切り替え
+   *  src: 'o' = 公式過去問の分析から / 'b' = 参考書例題の分析から / なし = 一般的な知識から
+   *  O.SRC.allow が空ならば一般的な知識のみ、そうでなければチェックした媒体のものだけを出題する。
+   */
+  O.SRC = { allow: new Set() };
+  const okSrc = (src) => (src ? O.SRC.allow.has(src) : O.SRC.allow.size === 0);
+  O.okSrc = okSrc;
+  O.setSources = (list) => {
+    O.SRC.allow = new Set(list || []);
+  };
+  const SUBS = () => O.SUBSTANCES.filter((x) => !x.src || okSrc(x.src));
   const fmtL = (n) => n.toLocaleString('ja-JP') + 'L';
 
   /* ───────── 問題オブジェクトを組み立てる ───────── */
@@ -31,6 +44,7 @@
       answer: choices.findIndex((c) => c.ok),
       exp: o.exp || '',
       notes: O.uniq([p.topic].concat(o.notes || [])),
+      src: o.src || p.src || '',
     };
     q.sig = O.hash(q.stem + '|' + (q.list ? q.list.map((x) => x.t).join('|') : '') + '|' + choices.map((c) => c.t).sort().join('|'));
     return q;
@@ -65,6 +79,7 @@
     return null;
   }
 
+  const srcOf = (sel) => O.uniq(sel.map((x) => x.src).filter(Boolean)).sort().join('');
   const stmtWhy = (s) => (s.ok ? '正しい記述' : '誤り。正しくは → ' + s.fix);
 
   /** 正誤問題（誤っているもの／正しいもの／いくつあるか） */
@@ -86,6 +101,7 @@
         const opts = [target].concat(others.slice(0, 4)).sort((a, b) => (key(a) < key(b) ? -1 : 1));
         const word = askFalse ? '誤っているもの' : '正しいもの';
         return build(p, {
+          src: srcOf(sel),
           stem: `${stemHead}、次のA〜Dのうち、${word}のみをすべて掲げているものはどれか。`,
           list,
           order: 'fixed',
@@ -94,7 +110,7 @@
           notes: extraNotes,
         });
       }
-      mode = 'neg';
+      mode = selectStatements(items, 4, 1) ? 'neg' : 'pos';
     }
     if (mode === 'count') {
       const askTrue = Math.random() < 0.6;
@@ -106,6 +122,7 @@
         const list = sel.map((s, i) => ({ label: labels[i], t: s.t, ok: s.ok, fix: s.fix || '' }));
         const ans = askTrue ? nTrue : 5 - nTrue;
         return build(p, {
+          src: srcOf(sel),
           stem: `${stemHead}、次のA〜Eのうち、${askTrue ? '正しいもの' : '誤っているもの'}はいくつあるか。`,
           list,
           order: 'fixed',
@@ -114,12 +131,13 @@
           notes: extraNotes,
         });
       }
-      mode = 'neg';
+      mode = selectStatements(items, 4, 1) ? 'neg' : 'pos';
     }
     const neg = mode === 'neg';
     const sel = selectStatements(items, neg ? 4 : 1, neg ? 1 : 4);
     if (!sel) throw new Error('not enough statements: ' + p.id);
     return build(p, {
+      src: srcOf(sel),
       stem: `${stemHead}、次のうち${neg ? '誤っているもの' : '正しいもの'}はどれか。`,
       choices: sel.map((s) => ({ t: s.t, ok: neg ? !s.ok : s.ok, mk: s.ok ? '○' : '×', why: stmtWhy(s) })),
       notes: extraNotes,
@@ -132,17 +150,36 @@
     const m = [];
     if (ok(4, 1)) m.push(['neg', 5]);
     if (ok(1, 4)) m.push(['pos', 3]);
-    if (items.length >= 6 && (ok(2, 3) || ok(3, 2))) m.push(['count', 1.5]);
-    if (items.length >= 6 && (ok(2, 2) || ok(3, 1) || ok(1, 3))) m.push(['combo', 1.5]);
+    if (items.length >= 5 && (ok(2, 3) || ok(3, 2))) m.push(['count', 1.5]);
+    if (items.length >= 5 && (ok(2, 2) || ok(3, 1) || ok(1, 3))) m.push(['combo', 1.5]);
     return m;
   }
   const chooseMode = (modes) => O.weightedPick(modes, (m) => m[1])[0];
 
   /* ───────── 1. 正誤問題バンク ───────── */
+  /* 出典で絞り込んだ記述と、そのとき使える出題形式（出典の組合せごとにキャッシュ） */
+  const srcKey = () => Array.from(O.SRC.allow).sort().join('') || '-';
+  function filteredItems(cache, items) {
+    const key = srcKey();
+    if (!cache[key]) {
+      const list = items.filter((it) => okSrc(it.src));
+      cache[key] = { list, modes: feasibleModes(list) };
+    }
+    return cache[key];
+  }
   O.BANKS.forEach((b) => {
-    const modes = feasibleModes(b.items);
     const pre = b.pre != null ? b.pre : '法令上、';
-    reg({ id: b.id, topic: b.topic, w: 4, make() { return statementQuestion(this, b.items, pre + b.stem, chooseMode(modes)); } });
+    const cache = {};
+    reg({
+      id: b.id,
+      topic: b.topic,
+      w: 4,
+      available: () => filteredItems(cache, b.items).modes.length > 0,
+      make() {
+        const f = filteredItems(cache, b.items);
+        return statementQuestion(this, f.list, pre + b.stem, chooseMode(f.modes));
+      },
+    });
   });
 
   /* ───────── 2. 物品ごとの性状問題（物品データから自動生成） ───────── */
@@ -150,8 +187,8 @@
   O.substanceStatements = function (s) {
     const g = O.GROUPS[s.g];
     const items = [];
-    s.facts.forEach((x) => items.push(Array.isArray(x) ? { ok: true, t: x[0], k: x[1] } : { ok: true, t: x }));
-    s.myths.forEach((m) => items.push({ ok: false, t: m[0], fix: m[1], k: m[2] }));
+    s.facts.forEach((x) => items.push(Array.isArray(x) ? { ok: true, t: x[0], k: x[1] || undefined, src: x[2] } : { ok: true, t: x }));
+    s.myths.forEach((m) => items.push({ ok: false, t: m[0], fix: m[1], k: m[2] || undefined, src: m[3] }));
     if (s.sol === 'yes') {
       items.push({ ok: true, t: '水によく溶ける', k: 'sol' }, { ok: false, t: '水に溶けない', fix: '水によく溶ける（水溶性）', k: 'sol' });
     } else if (s.sol === 'no') {
@@ -177,6 +214,7 @@
     return items.filter((it) => {
       if (seen.has(it.t)) return false;
       seen.add(it.t);
+      if (s.src) it.src = s.src;
       if (!it.k) it.k = /発火点/.test(it.t) ? 'ign' : /燃焼範囲/.test(it.t) ? 'range' : /引火点/.test(it.t) ? 'fp' : undefined;
       return true;
     });
@@ -185,15 +223,27 @@
   const SUB_TOPICS = ['s_tokushu', 's_dai1', 's_alcohol', 's_dai2', 's_dai3'];
   SUB_TOPICS.forEach((topic) => {
     const subs = O.SUBSTANCES.filter((s) => O.GROUPS[s.g].topic === topic);
+    const caches = {};
+    const usable = () => {
+      const key = srcKey();
+      if (!caches[key]) {
+        caches[key] = subs
+          .map((s) => {
+            const list = O.substanceStatements(s).filter((it) => okSrc(it.src));
+            return { s, list, modes: feasibleModes(list).filter((m) => m[0] !== 'count') };
+          })
+          .filter((x) => x.modes.length);
+      }
+      return caches[key];
+    };
     reg({
       id: 'sub_' + topic,
       topic,
       w: 16, // 公式問題では性消10問のうち約半数が「〇〇の性状について」形式
+      available: () => usable().length > 0,
       make() {
-        const s = pick(subs);
-        const items = O.substanceStatements(s);
-        const modes = feasibleModes(items).filter((m) => m[0] !== 'count');
-        return statementQuestion(this, items, `${s.name}の性状について`, chooseMode(modes), ['sub_' + s.id]);
+        const { s, list, modes } = pick(usable());
+        return statementQuestion(this, list, `${s.name}の性状について`, chooseMode(modes), ['sub_' + s.id]);
       },
     });
   });
@@ -268,7 +318,7 @@
       topic: d.topic,
       w: d.w || 2,
       make() {
-        const cands = O.SUBSTANCES.filter((s) => s[d.prop]);
+        const cands = SUBS().filter((s) => s[d.prop]);
         for (let attempt = 0; attempt < 40; attempt++) {
           const chosen = [];
           for (const s of shuffle(cands)) {
@@ -572,7 +622,7 @@
   reg({
     id: 'ord_seq_fp', topic: 's_kyotsu', w: 2,
     make() {
-      const cands = O.SUBSTANCES.filter((s) => s.fp);
+      const cands = SUBS().filter((s) => s.fp);
       const sep = (a, b) => a.fp[1] + 2 < b.fp[0] || b.fp[1] + 2 < a.fp[0];
       const triple = () => {
         for (let i = 0; i < 50; i++) {
@@ -622,7 +672,7 @@
     yes: KIKEN_NO, no: KIKEN_YES,
     exp: '気体（水素・酸素・プロパンなど）や、硫酸・塩酸・消石灰は危険物ではない。動植物油（ナタネ油・アマニ油など）は第4類の危険物。',
   });
-  const subName = (f) => () => O.SUBSTANCES.filter(f).map((s) => s.name);
+  const subName = (f) => () => SUBS().filter(f).map((s) => s.name);
   regCountList({
     id: 'cnt_omoi', topic: 's_kyotsu', w: 2, label: '液比重が1より大きい',
     stem: '次の危険物のうち、液比重が1より大きいものはいくつあるか。',
@@ -704,7 +754,7 @@
   });
   regPair({
     id: 'pair_hinmei', topic: 'h_hinmei', stem: '法令上、危険物の物品名とその品名の組合せとして', w: 3,
-    pairs: () => O.SUBSTANCES.map((s) => [s.name, O.GROUPS[s.g].name]).concat(O.EXTRA_HINMEI.map(([n, g]) => [n, O.GROUPS[g].name])),
+    pairs: () => SUBS().map((s) => [s.name, O.GROUPS[s.g].name]),
   });
   regPair({
     id: 'pair_hinmei_def', topic: 'h_hinmei', stem: '法令上、第4類の品名とその定義（1気圧における引火点）の組合せとして',
@@ -714,19 +764,19 @@
     id: 'set_hinmei_d1', topic: 'h_hinmei',
     stemPos: '法令上、次の危険物のうち、第1石油類に該当するものはどれか。',
     yesLabel: '第1石油類', noLabel: '第1石油類ではない',
-    yes: () => O.SUBSTANCES.filter((s) => s.g === 'dai1').map((s) => [s.name, '']),
-    no: () => O.SUBSTANCES.filter((s) => s.g !== 'dai1').map((s) => [s.name, O.GROUPS[s.g].name]),
+    yes: () => SUBS().filter((s) => s.g === 'dai1').map((s) => [s.name, '']),
+    no: () => SUBS().filter((s) => s.g !== 'dai1').map((s) => [s.name, O.GROUPS[s.g].name]),
   });
   regSet({
     id: 'set_hinmei_d2', topic: 'h_hinmei',
     stemPos: '法令上、次の危険物のうち、第2石油類に該当するものはどれか。',
     yesLabel: '第2石油類', noLabel: '第2石油類ではない',
-    yes: () => O.SUBSTANCES.filter((s) => s.g === 'dai2').map((s) => [s.name, '']),
-    no: () => O.SUBSTANCES.filter((s) => s.g !== 'dai2').map((s) => [s.name, O.GROUPS[s.g].name]),
+    yes: () => SUBS().filter((s) => s.g === 'dai2').map((s) => [s.name, '']),
+    no: () => SUBS().filter((s) => s.g !== 'dai2').map((s) => [s.name, O.GROUPS[s.g].name]),
   });
   regPair({
     id: 'pair_shitei', topic: 'h_shitei', stem: '法令上、危険物の物品名と指定数量の組合せとして',
-    pairs: () => O.SUBSTANCES.map((s) => [s.name, fmtL(O.shiteiOf(s))]),
+    pairs: () => SUBS().map((s) => [s.name, fmtL(O.shiteiOf(s))]),
   });
 
   /* 指定数量の倍数計算 */
@@ -1161,8 +1211,8 @@
     stemPos: '次の危険物のうち、液比重が1より大きい（水より重い）ものはどれか。',
     stemNeg: '次の危険物のうち、液比重が1より小さい（水より軽い）ものはどれか。',
     yesLabel: '水より重い', noLabel: '水より軽い',
-    yes: () => O.SUBSTANCES.filter((s) => s.sg && s.sg[0] > 1).map((s) => [s.name, '比重' + s.sgT]),
-    no: () => O.SUBSTANCES.filter((s) => s.sg && s.sg[1] < 1).map((s) => [s.name, '比重' + s.sgT]),
+    yes: () => SUBS().filter((s) => s.sg && s.sg[0] > 1).map((s) => [s.name, '比重' + s.sgT]),
+    no: () => SUBS().filter((s) => s.sg && s.sg[1] < 1).map((s) => [s.name, '比重' + s.sgT]),
     notes: (sel) => sel.map(([t]) => 'sub_' + O.SUBSTANCES.find((s) => s.name === t).id),
   });
   regSet({
@@ -1170,8 +1220,8 @@
     stemPos: '次の危険物のうち、水によく溶けるものはどれか。',
     stemNeg: '次の危険物のうち、水に溶けないものはどれか。',
     yesLabel: '水によく溶ける', noLabel: '水に溶けない',
-    yes: () => O.SUBSTANCES.filter((s) => s.sol === 'yes').map((s) => s.name),
-    no: () => O.SUBSTANCES.filter((s) => s.sol === 'no').map((s) => s.name),
+    yes: () => SUBS().filter((s) => s.sol === 'yes').map((s) => s.name),
+    no: () => SUBS().filter((s) => s.sol === 'no').map((s) => s.name),
     notes: (sel) => sel.map(([t]) => 'sub_' + O.SUBSTANCES.find((s) => s.name === t).id),
   });
   regSet({
@@ -1179,8 +1229,8 @@
     stemPos: '次の危険物の火災のうち、消火に水溶性液体用泡消火剤（耐アルコール泡）を用いなければならないものはどれか。',
     stemNeg: '次の危険物の火災のうち、一般の泡消火剤で消火できるものはどれか。',
     yesLabel: '水溶性（耐アルコール泡が必要）', noLabel: '非水溶性（一般の泡で消火できる）',
-    yes: () => O.SUBSTANCES.filter((s) => s.sol === 'yes').map((s) => s.name),
-    no: () => O.SUBSTANCES.filter((s) => s.sol === 'no').map((s) => s.name),
+    yes: () => SUBS().filter((s) => s.sol === 'yes').map((s) => s.name),
+    no: () => SUBS().filter((s) => s.sol === 'no').map((s) => s.name),
   });
   regSet({
     id: 'set_shoka4', topic: 's_shoka',
@@ -1195,8 +1245,8 @@
     stemPos: '次の危険物のうち、引火点が常温（20℃）より高いものはどれか。',
     stemNeg: '次の危険物のうち、引火点が常温（20℃）より低いものはどれか。',
     yesLabel: '引火点が20℃より高い', noLabel: '引火点が20℃より低い',
-    yes: () => O.SUBSTANCES.filter((s) => s.fp && s.fp[0] > 20).map((s) => [s.name, '引火点' + s.fpT]),
-    no: () => O.SUBSTANCES.filter((s) => s.fp && s.fp[1] < 20).map((s) => [s.name, '引火点' + s.fpT]),
+    yes: () => SUBS().filter((s) => s.fp && s.fp[0] > 20).map((s) => [s.name, '引火点' + s.fpT]),
+    no: () => SUBS().filter((s) => s.fp && s.fp[1] < 20).map((s) => [s.name, '引火点' + s.fpT]),
   });
   /* 物理・化学（参考書の演習問題IIの分析から追加） */
   [['単体', TANTAI], ['化合物', KAGOU], ['混合物', KONGOU]].forEach(([name, list]) => {
@@ -1251,8 +1301,8 @@
     make() {
       for (let i = 0; i < 40; i++) {
         const T = pick([0, 10, 20, 30, 50]);
-        const lo = O.SUBSTANCES.filter((x) => x.fp && x.fp[1] < T - 2);
-        const hi = O.SUBSTANCES.filter((x) => x.fp && x.fp[0] > T + 2);
+        const lo = SUBS().filter((x) => x.fp && x.fp[1] < T - 2);
+        const hi = SUBS().filter((x) => x.fp && x.fp[0] > T + 2);
         if (!lo.length || hi.length < 4) continue;
         const ans = pick(lo);
         const others = sample(hi, 4);
@@ -1547,4 +1597,23 @@
     yes: ['外壁が耐火構造の製造所は、延べ面積100m²を1所要単位とする', '外壁が耐火構造でない製造所は、延べ面積50m²を1所要単位とする', '外壁が耐火構造の貯蔵所は、延べ面積150m²を1所要単位とする', '外壁が耐火構造でない貯蔵所は、延べ面積75m²を1所要単位とする', '危険物は、指定数量の10倍を1所要単位とする'],
     no: [['外壁が耐火構造の貯蔵所は、延べ面積50m²を1所要単位とする', '150m²'], ['外壁が耐火構造でない製造所は、延べ面積150m²を1所要単位とする', '50m²'], ['外壁が耐火構造の製造所は、延べ面積75m²を1所要単位とする', '100m²'], ['危険物は、指定数量の100倍を1所要単位とする', '10倍']],
   });
+  regPair({
+    id: 'pair_hinmei_b', topic: 'h_hinmei', stem: '法令上、危険物の物品名とその品名の組合せとして', w: 2,
+    pairs: () => O.EXTRA_HINMEI.map(([n, g]) => [n, O.GROUPS[g].name]).concat(SUBS().filter((x) => x.src === 'b').map((x) => [x.name, O.GROUPS[x.g].name])),
+  });
+
+  /* ───────── 出典の割り当て（git の履歴から: 公式過去問の分析で追加したもの／参考書例題の分析で追加したもの） ───────── */
+  const SRC_IDS = {
+    o: ['set_4rui_hinmei', 'combo_okugai', 'combo_kyori', 'set_5shu_all', 'g_menjo_shinsei', 'set_tenken_kiroku', 'set_hoankensa', 'pair_unpan_chui', 'g_self_color', 'g_nensho_jouken', 'g_seiseinetsu', 'pair_kannoki'],
+    b: ['ord_seq_fp', 'cnt_kiken', 'cnt_omoi', 'cnt_suiyo', 'cnt_jouon', 'blank_hani', 'blank_inka', 'blank_hakka', 'blank_nensho', 'combo_abura_denki', 'set_kanseiyu', 'set_dai4', 'cnt_bunrui_単体', 'cnt_bunrui_化合物', 'cnt_bunrui_混合物', 'set_dosotai', 'pair_jotai', 'blank_futten', 'cnt_kyori', 'cnt_kuchi', 'pair_rui_buppin', 'g_inka_temp', 'g_inka_hani2', 'set_kiken_small', 'blank_shizen', 'blank_youso', 'blank_youso2', 'blank_mizu', 'combo_denki', 'g_jotai_temp', 'g_kitai_hiju', 'g_netsukagaku', 'g_bocho_temp', 'set_ph', 'set_ensan', 'cnt_boshoku', 'g_moeyasui', 'g_baisu_drum', 'g_baisu_add', 'set_tokatsu', 'set_10ka', 'set_meirei_shurui', 'set_yobo_naiyo', 'combo_kuchi', 'set_teishi_40', 'set_shoyo', 'pair_hinmei_b'],
+  };
+  Object.keys(SRC_IDS).forEach((src) =>
+    SRC_IDS[src].forEach((id) => {
+      const p = P.find((x) => x.id === id);
+      if (!p) throw new Error('unknown provider ' + id);
+      p.src = src;
+    })
+  );
+  /** 現在の出典設定でこのプロバイダーが使えるか */
+  O.providerAvailable = (p) => (p.available ? p.available() : okSrc(p.src));
 })();

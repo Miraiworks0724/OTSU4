@@ -123,6 +123,44 @@ Object.values(O.TOPICS).forEach((t) => {
   }
 });
 
+// 7. 参照する媒体（出典）ごとの出題
+[[], ['o'], ['b'], ['o', 'b']].forEach((srcs) => {
+  O.setSources(srcs);
+  const allowed = (x) => (x ? srcs.includes(x) : srcs.length === 0);
+  O.PROVIDERS.filter(O.providerAvailable).forEach((p) => {
+    for (let i = 0; i < 40; i++) {
+      let q;
+      try {
+        q = p.make();
+      } catch (e) {
+        fail(`src ${srcs}: ${p.id}: ${e.message}`);
+        break;
+      }
+      (q.src || '').split('').forEach((c) => {
+        if (!srcs.includes(c)) fail(`src ${srcs}: ${p.id} produced src ${q.src}`);
+      });
+      if (!srcs.length && q.src) fail(`base mode produced src ${q.src} from ${p.id}`);
+      if (srcs.length && !q.src) fail(`src ${srcs}: ${p.id} produced base question`);
+    }
+  });
+  for (let i = 0; i < 30; i++) {
+    let qs;
+    try {
+      qs = O.buildExam();
+    } catch (e) {
+      fail(`src ${srcs}: exam ${e.message}`);
+      break;
+    }
+    if (qs.length !== 35) fail(`src ${srcs}: exam length`);
+  }
+  for (let i = 0; i < 100; i++) {
+    const q = O.nextPractice({ subject: 'all', weak: false, minFreq: 1, recentPids: [], recentSigs: [] });
+    if (!q) fail(`src ${srcs}: practice null`);
+  }
+  void allowed;
+});
+O.setSources([]);
+
 const totalVariants = Object.values(counts).reduce((a, b) => a + b, 0);
 console.log(`providers: ${O.PROVIDERS.length}, banks: ${O.BANKS.length}, statements: ${O.BANKS.reduce((a, b) => a + b.items.length, 0)}, substances: ${O.SUBSTANCES.length}`);
 console.log(`distinct questions seen in ${N} draws/provider: ${totalVariants}`);
