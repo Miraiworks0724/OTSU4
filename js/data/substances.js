@@ -169,6 +169,18 @@
       ],
     },
     {
+      id: 'mek', name: 'メチルエチルケトン', formula: 'CH₃COC₂H₅', g: 'dai1', ws: false, sol: 'slight',
+      fp: [-9, -9], fpT: '-9℃', ign: [404, 505], ignT: '404℃', bpT: '80℃', sg: [0.8, 0.8], sgT: '0.8', rangeT: null,
+      facts: [
+        '無色の液体で、アセトンに似た臭気がある',
+        '水にある程度溶けるが、法令上は非水溶性の第1石油類である',
+        '塗料などの溶剤として使われる',
+      ],
+      myths: [
+        ['第3石油類に該当する', '引火点-9℃の第1石油類'],
+      ],
+    },
+    {
       id: 'acetone', name: 'アセトン', formula: 'CH₃COCH₃', g: 'dai1', ws: true, sol: 'yes',
       fp: [-20, -20], fpT: '-20℃', ign: [465, 540], ignT: '465℃', bpT: '56℃', sg: [0.79, 0.79], sgT: '0.79', rangeT: '2.15〜13vol%',
       facts: [
@@ -324,6 +336,18 @@
       ],
     },
     {
+      id: 'formicacid', name: 'ギ酸', formula: 'HCOOH', g: 'dai2', ws: true, sol: 'yes',
+      fp: [68, 69], fpT: '69℃', ign: null, ignT: null, bpT: '101℃', sg: [1.22, 1.22], sgT: '1.22', rangeT: null,
+      facts: [
+        '無色透明で、刺激臭のある液体である',
+        '強い腐食性があり、皮膚に触れると薬傷を起こす',
+        '還元性がある',
+      ],
+      myths: [
+        ['腐食性はない', '強い腐食性がある'],
+      ],
+    },
+    {
       id: 'acrylicacid', name: 'アクリル酸', formula: 'CH₂=CHCOOH', g: 'dai2', ws: true, sol: 'yes',
       fp: [48, 56], fpT: '51℃', ign: [390, 440], ignT: '438℃', bpT: '141℃', sg: [1.05, 1.06], sgT: '1.06', rangeT: null,
       facts: [
@@ -442,6 +466,18 @@
     },
   ];
 
+  /* 品名の分類問題だけに使う物品（性状データは持たない） */
+  O.EXTRA_HINMEI = [
+    ['タービン油', 'dai4'], ['モーター油', 'dai4'], ['シリンダー油', 'dai4'], ['可塑剤', 'dai4'],
+    ['ナタネ油', 'doshoku'], ['ツバキ油', 'doshoku'], ['ヒマシ油', 'doshoku'], ['キリ油', 'doshoku'], ['オリーブ油', 'doshoku'], ['ヤシ油', 'doshoku'],
+    ['n-ブチルアルコール', 'dai2'], ['プロピオン酸', 'dai2'], ['ヘキサン', 'dai1'],
+  ];
+  /* 動植物油の乾性による分類 */
+  O.OIL_DRYING = {
+    乾性油: ['アマニ油', 'キリ油', 'エノ油'],
+    半乾性油: ['ナタネ油', 'ゴマ油', '綿実油'],
+    不乾性油: ['オリーブ油', 'ヤシ油', 'ヒマシ油', 'ツバキ油', '落花生油'],
+  };
   O.SUB = {};
   O.SUBSTANCES.forEach((s) => (O.SUB[s.id] = s));
   O.shiteiOf = (s) => O.GROUPS[s.g].shitei[s.ws ? 1 : 0];

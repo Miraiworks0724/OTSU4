@@ -506,6 +506,187 @@
     ],
   });
 
+  /* ═════════════ 市販参考書の演習問題の分析から追加した出題形式 ═════════════ */
+
+  /* 「次のうち〜ものはいくつあるか」（物品名を並べて数える形式） */
+  function regCountList(d) {
+    reg({
+      id: d.id,
+      topic: d.topic,
+      w: d.w || 2,
+      make() {
+        const yes = O.uniq(typeof d.yes === 'function' ? d.yes() : d.yes);
+        const no = O.uniq((typeof d.no === 'function' ? d.no() : d.no).filter((x) => !yes.includes(x)));
+        for (let i = 0; i < 20; i++) {
+          const total = ri(8, 10);
+          const k = ri(1, 5);
+          if (yes.length < k || no.length < total - k) continue;
+          const picked = shuffle(sample(yes, k).concat(sample(no, total - k)));
+          return build(this, {
+            stem: `${d.stem}\n${picked.join('・')}`,
+            order: 'fixed',
+            choices: [1, 2, 3, 4, 5].map((n) => ({ t: `${n}つ`, ok: n === k })),
+            exp: `${d.label}もの: ${picked.filter((x) => yes.includes(x)).join('・')}（${k}つ）` + (d.exp ? '\n' + d.exp : ''),
+            notes: d.notes,
+          });
+        }
+        throw new Error('countList: could not choose ' + d.id);
+      },
+    });
+  }
+
+  /* 「次の文の【①】〜【③】に当てはまる語句の組合せ」（穴埋め形式） */
+  function regBlank(d) {
+    reg({
+      id: d.id,
+      topic: d.topic,
+      w: d.w || 2,
+      make() {
+        const n = d.slots.length;
+        const marks = ['①', '②', '③', '④'];
+        const correct = d.slots.map(() => 0);
+        const seen = new Set([correct.join()]);
+        const opts = [correct];
+        while (opts.length < 5) {
+          const c = correct.slice();
+          const changes = ri(1, n);
+          sample([...Array(n).keys()], changes).forEach((j) => (c[j] = ri(1, d.slots[j].length - 1)));
+          if (!seen.has(c.join())) {
+            seen.add(c.join());
+            opts.push(c);
+          }
+        }
+        const text = (c) => c.map((v, j) => `${marks[j]}${d.slots[j][v]}`).join('　');
+        return build(this, {
+          stem: `${d.stem}\n「${d.template}」`,
+          choices: opts.map((c) => ({ t: text(c), ok: c === correct })),
+          exp: '正しい文: ' + d.template.replace(/【([①②③④])】/g, (_, m) => '「' + d.slots[marks.indexOf(m)][0] + '」'),
+        });
+      },
+    });
+  }
+
+  /* 「低いものから高いものへ並べられているもの」（3物品の並び順） */
+  reg({
+    id: 'ord_seq_fp', topic: 's_kyotsu', w: 2,
+    make() {
+      const cands = O.SUBSTANCES.filter((s) => s.fp);
+      const sep = (a, b) => a.fp[1] + 2 < b.fp[0] || b.fp[1] + 2 < a.fp[0];
+      const triple = () => {
+        for (let i = 0; i < 50; i++) {
+          const t = sample(cands, 3);
+          if (sep(t[0], t[1]) && sep(t[1], t[2]) && sep(t[0], t[2])) return t;
+        }
+        return null;
+      };
+      const asc = (t) => t.slice().sort((a, b) => a.fp[0] - b.fp[0]);
+      const opts = [];
+      const seen = new Set();
+      let guard = 0;
+      while (opts.length < 5 && guard++ < 200) {
+        const t = triple();
+        if (!t) continue;
+        const sorted = asc(t);
+        const isFirst = opts.length === 0;
+        let order = sorted;
+        if (!isFirst) {
+          const perms = [[0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+          const pm = pick(perms);
+          order = pm.map((k) => sorted[k]);
+        }
+        const key = order.map((x) => x.id).join();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        opts.push({ order, ok: isFirst });
+      }
+      return build(this, {
+        stem: '次の危険物を引火点の低いものから高いものの順に並べたとき、正しく並んでいるものはどれか。',
+        choices: opts.map((o) => ({
+          t: o.order.map((x) => x.name).join(' → '),
+          ok: o.ok,
+          mk: o.ok ? '○' : '×',
+          why: o.order.map((x) => `${x.name} ${x.fpT}`).join('、'),
+        })),
+        exp: '目安: 特殊引火物 ＜ 第1石油類 ＜ アルコール類 ＜ 第2石油類 ＜ 第3石油類 ＜ 第4石油類 の順に引火点が高くなる。',
+      });
+    },
+  });
+
+  const KIKEN_YES = ['灯油', '軽油', '酢酸', 'アセトン', 'ベンゼン', 'ギヤー油', 'ナタネ油', 'アマニ油', 'キリ油', 'ガソリン', '硫黄', '硝酸', '過酸化水素', '赤りん', 'ナトリウム'];
+  const KIKEN_NO = ['水素', '酸素', 'プロパン', 'アセチレン', '硫酸', '塩酸', '液体酸素', '窒素', '一酸化炭素', '消石灰'];
+  regCountList({
+    id: 'cnt_kiken', topic: 's_rui', w: 2, label: '危険物ではない',
+    stem: '次のうち、消防法上の危険物ではないものはいくつあるか。',
+    yes: KIKEN_NO, no: KIKEN_YES,
+    exp: '気体（水素・酸素・プロパンなど）や、硫酸・塩酸・消石灰は危険物ではない。動植物油（ナタネ油・アマニ油など）は第4類の危険物。',
+  });
+  const subName = (f) => () => O.SUBSTANCES.filter(f).map((s) => s.name);
+  regCountList({
+    id: 'cnt_omoi', topic: 's_kyotsu', w: 2, label: '液比重が1より大きい',
+    stem: '次の危険物のうち、液比重が1より大きいものはいくつあるか。',
+    yes: subName((s) => s.sg && s.sg[0] > 1), no: subName((s) => s.sg && s.sg[1] < 1),
+    exp: '水より重い第4類は少数なので、二硫化炭素・酢酸・グリセリンなどを個別に覚える。',
+  });
+  regCountList({
+    id: 'cnt_suiyo', topic: 's_kyotsu', w: 2, label: '水によく溶ける',
+    stem: '次の危険物のうち、水によく溶けるものはいくつあるか。',
+    yes: subName((s) => s.sol === 'yes'), no: subName((s) => s.sol === 'no'),
+  });
+  regCountList({
+    id: 'cnt_jouon', topic: 's_kyotsu', w: 2, label: '常温（20℃）で引火する',
+    stem: '次の危険物のうち、常温（20℃）で引火するものはいくつあるか。',
+    yes: subName((s) => s.fp && s.fp[1] < 20), no: () => subName((s) => s.fp && s.fp[0] > 20)().concat(['タービン油', 'モーター油', 'シリンダー油']),
+    exp: '目安: 特殊引火物・第1石油類・アルコール類は引火点が20℃より低く常温で引火する。第2石油類以降は常温では引火しない（ピリジンは引火点20℃）。',
+  });
+
+  regBlank({
+    id: 'blank_hani', topic: 'b_inka', w: 2,
+    stem: '燃焼範囲の説明として、次の文の【①】〜【③】に当てはまる語句の組合せで正しいものはどれか。',
+    template: '燃焼範囲とは、【①】において【②】することができる【③】の濃度範囲のことをいう。',
+    slots: [['空気中', '水中', '真空中', '液体中'], ['燃焼', '分解', '凝縮', '蒸発'], ['可燃性蒸気', '酸素', '水蒸気', '二酸化炭素']],
+  });
+  regBlank({
+    id: 'blank_inka', topic: 'b_inka', w: 2,
+    stem: '引火点の説明として、次の文の【①】〜【③】に当てはまる語句の組合せで正しいものはどれか。',
+    template: '引火点とは、【①】が空気中で引火するのに十分な濃度の蒸気を【②】に発生するときの【③】をいう。',
+    slots: [['可燃性液体', '不燃性液体', '可燃性気体'], ['液面上', '液体の内部', '容器の底部'], ['最低の液温', '最高の液温', '平均の液温']],
+  });
+  regBlank({
+    id: 'blank_hakka', topic: 'b_inka', w: 2,
+    stem: '発火点の説明として、次の文の【①】〜【③】に当てはまる語句の組合せで正しいものはどれか。',
+    template: '発火点とは、空気中で可燃物を【①】した場合、【②】を近づけなくても自ら燃えだすときの【③】をいう。',
+    slots: [['加熱', '冷却', '点火'], ['炎や火花などの点火源', '酸素', '空気'], ['最低の温度', '最高の温度', '平均の温度']],
+  });
+  regBlank({
+    id: 'blank_nensho', topic: 'b_nensho', w: 1,
+    stem: '燃焼の説明として、次の文の【①】【②】に当てはまる語句の組合せで正しいものはどれか。',
+    template: '燃焼とは、【①】の発生を伴う急激な【②】反応である。',
+    slots: [['熱と光', '熱と音', '光と煙', '音と煙'], ['酸化', '還元', '分解', '中和', '重合']],
+  });
+  regCombo({
+    id: 'combo_abura_denki', topic: 'b_shoka', k: 3, w: 2,
+    stem: '油火災と電気火災の両方に適応する消火剤のみの組合せとして、次のうち正しいものはどれか。',
+    yesLabel: '油火災・電気火災の両方に適応', noLabel: 'どちらかに適応しない',
+    yes: ['ハロゲン化物', '二酸化炭素', '霧状の強化液', 'りん酸塩類の粉末', '炭酸水素塩類の粉末'],
+    no: [['泡', '電気火災に不適（感電）'], ['棒状の強化液', '油・電気火災に不適'], ['棒状の水', '油・電気火災に不適'], ['霧状の水', '油火災に不適']],
+  });
+  regSet({
+    id: 'set_kanseiyu', topic: 's_dai3', w: 2,
+    stemPos: '次の動植物油のうち、乾性油に該当するものはどれか。',
+    stemNeg: '次の動植物油のうち、乾性油に該当しないものはどれか。',
+    yesLabel: '乾性油（ヨウ素価130以上）', noLabel: '乾性油ではない',
+    yes: O.OIL_DRYING.乾性油,
+    no: O.OIL_DRYING.半乾性油.map((x) => [x, '半乾性油']).concat(O.OIL_DRYING.不乾性油.map((x) => [x, '不乾性油'])),
+  });
+  regSet({
+    id: 'set_dai4', topic: 's_dai3', w: 2,
+    stemPos: '次のうち、第4石油類に該当するものはどれか。',
+    stemNeg: '次のうち、第4石油類に該当しないものはどれか。',
+    yesLabel: '第4石油類', noLabel: '第4石油類ではない',
+    yes: ['ギヤー油', 'シリンダー油', 'タービン油', 'モーター油'],
+    no: [['ツバキ油', '動植物油類'], ['アマニ油', '動植物油類'], ['ヒマシ油', '動植物油類'], ['クレオソート油', '第3石油類'], ['重油', '第3石油類'], ['ナタネ油', '動植物油類']],
+  });
+
   /* ═════════════ 法令 ═════════════ */
   regSet({
     id: 'set_kiken', topic: 'h_def',
@@ -521,7 +702,7 @@
   });
   regPair({
     id: 'pair_hinmei', topic: 'h_hinmei', stem: '法令上、危険物の物品名とその品名の組合せとして', w: 3,
-    pairs: () => O.SUBSTANCES.map((s) => [s.name, O.GROUPS[s.g].name]),
+    pairs: () => O.SUBSTANCES.map((s) => [s.name, O.GROUPS[s.g].name]).concat(O.EXTRA_HINMEI.map(([n, g]) => [n, O.GROUPS[g].name])),
   });
   regPair({
     id: 'pair_hinmei_def', topic: 'h_hinmei', stem: '法令上、第4類の品名とその定義（1気圧における引火点）の組合せとして',
@@ -551,7 +732,7 @@
     id: 'g_baisu', topic: 'h_shitei', w: 5,
     make() {
       const pool = ['gasoline', 'benzene', 'toluene', 'acetone', 'methanol', 'ethanol', 'kerosene', 'diesel', 'aceticacid', 'heavyoil', 'creosote', 'glycerin', 'eg', 'gearoil', 'ether', 'cs2', 'linseed', 'xylene'].map((id) => O.SUB[id]);
-      const n = pick([2, 3, 3]);
+      const n = pick([2, 3, 3, 4, 4]);
       const subs = sample(pool, n);
       const items = subs.map((s) => {
         const k = pick([0.5, 1, 1.5, 2, 2.5, 3, 4, 5]);
@@ -1015,4 +1196,32 @@
     yes: () => O.SUBSTANCES.filter((s) => s.fp && s.fp[0] > 20).map((s) => [s.name, '引火点' + s.fpT]),
     no: () => O.SUBSTANCES.filter((s) => s.fp && s.fp[1] < 20).map((s) => [s.name, '引火点' + s.fpT]),
   });
+  /* 物理・化学（参考書の演習問題IIの分析から追加） */
+  [['単体', TANTAI], ['化合物', KAGOU], ['混合物', KONGOU]].forEach(([name, list]) => {
+    regCountList({
+      id: 'cnt_bunrui_' + name, topic: 'b_busshitsu', w: 1, label: name + 'である',
+      stem: `次の物質のうち、${name}はいくつあるか。`,
+      yes: list, no: () => TANTAI.concat(KAGOU, KONGOU).filter((x) => !list.includes(x)),
+      exp: '単体＝1種類の元素（酸素・水素など）／化合物＝2種類以上の元素が結合（水・二酸化炭素・エタノールなど）／混合物＝複数の物質が混ざったもの（空気・食塩水・灯油・軽油・重油など）',
+    });
+  });
+  regSet({
+    id: 'set_dosotai', topic: 'b_busshitsu', w: 2,
+    stemPos: '次の組合せのうち、互いに同素体であるものはどれか。',
+    stemNeg: '次の組合せのうち、互いに同素体でないものはどれか。',
+    yesLabel: '同素体', noLabel: '同素体ではない',
+    yes: ['酸素とオゾン', 'O₂とO₃', '黒鉛とダイヤモンド', '黄りんと赤りん', '斜方硫黄と単斜硫黄'],
+    no: [['濃硫酸と希硫酸', '濃度が違うだけの同じ物質'], ['水と過酸化水素', '別の化合物'], ['エタノールとジメチルエーテル', '異性体'], ['水素と重水素', '同位体'], ['一酸化炭素と二酸化炭素', '別の化合物']],
+  });
+  regPair({
+    id: 'pair_jotai', topic: 'b_jotai', stem: '物質の状態変化とその名称の組合せとして', w: 2, sep: '…',
+    pairs: [['液体から固体になる変化', '凝固'], ['固体から液体になる変化', '融解'], ['液体から気体になる変化', '蒸発（気化）'], ['気体から液体になる変化', '凝縮'], ['固体から直接気体になる変化', '昇華'], ['気体から直接固体になる変化', '昇華']],
+  });
+  regBlank({
+    id: 'blank_futten', topic: 'b_jotai', w: 2,
+    stem: '沸点の説明として、次の文の【①】〜【④】に当てはまる語句の組合せで正しいものはどれか。',
+    template: '沸点とは、液体の【①】と【②】とが等しくなるときの液温をいう。また、沸点は加圧すると【③】なり、減圧すると【④】なる。',
+    slots: [['飽和蒸気圧', '最高蒸気圧', '最低蒸気圧'], ['外圧', '内圧'], ['高く', '低く'], ['低く', '高く']],
+  });
+
 })();
