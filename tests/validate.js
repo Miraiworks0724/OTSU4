@@ -40,7 +40,7 @@ O.BANKS.forEach((b) => {
 // 1b. 暗記ノートの書式
 Object.keys(O.NOTES).forEach((id) => {
   O.NOTES[id].body.forEach((it) => {
-    if (typeof it !== 'string' && !(it && it.subs)) fail(`note ${id}: invalid body item ${JSON.stringify(it)}`);
+    if (typeof it !== 'string' && !(it && (it.subs || it.chart))) fail(`note ${id}: invalid body item ${JSON.stringify(it)}`);
   });
 });
 

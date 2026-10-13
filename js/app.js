@@ -60,7 +60,11 @@
       list = null;
     };
     body.forEach((item) => {
-      if (typeof item === 'object' && item.subs) {
+      if (typeof item === 'object' && item.chart) {
+        flushTable();
+        flushList();
+        html += dai4Chart();
+      } else if (typeof item === 'object' && item.subs) {
         flushTable();
         flushList();
         html += substanceTable(item.subs);
@@ -79,6 +83,52 @@
     flushTable();
     flushList();
     return html;
+  }
+  /* 第4類の早見図（品名・引火点・危険等級・指定数量） */
+  function dai4Chart() {
+    const ROWS = [
+      { g: 'tokushu', grade: 1, cond: '発火点100℃以下、または引火点-20℃以下かつ沸点40℃以下', ex: 'ジエチルエーテル・二硫化炭素・アセトアルデヒド・酸化プロピレン' },
+      { g: 'dai1', grade: 2, cond: '引火点 21℃未満', ex: 'ガソリン・ベンゼン・トルエン／水溶性: アセトン・ピリジン' },
+      { g: 'alcohol', grade: 2, cond: '炭素数1〜3の飽和1価アルコール', ex: 'メタノール・エタノール・プロパノール', line: '21℃' },
+      { g: 'dai2', grade: 3, cond: '引火点 21℃以上 70℃未満', ex: '灯油・軽油・キシレン／水溶性: 酢酸', line: '70℃' },
+      { g: 'dai3', grade: 3, cond: '引火点 70℃以上 200℃未満', ex: '重油・クレオソート油／水溶性: グリセリン', line: '200℃' },
+      { g: 'dai4', grade: 3, cond: '引火点 200℃以上 250℃未満', ex: 'ギヤー油・シリンダー油', line: '250℃' },
+      { g: 'doshoku', grade: 3, cond: '動植物から抽出、引火点 250℃未満', ex: 'アマニ油・ナタネ油・ヤシ油' },
+    ];
+    const roman = ['', 'Ⅰ', 'Ⅱ', 'Ⅲ'];
+    const max = Math.log10(10000);
+    const bar = (v) => `<span class="d4-bar"><i style="width:${Math.max(8, (Math.log10(v) / max) * 100)}%"></i></span>`;
+    const cell = (r) => {
+      const [nw, w] = O.GROUPS[r.g].shitei;
+      const qty = nw === w ? `<b>${nw.toLocaleString()}</b>L` : `<b>${nw.toLocaleString()}</b>L<span class="d4-ws">水溶性 <b>${w.toLocaleString()}</b>L（×2）</span>`;
+      return `<div class="d4-cell g${r.grade}">
+          <div class="d4-name">${esc(O.GROUPS[r.g].name)}</div>
+          <div class="d4-cond">${esc(r.cond)}</div>
+          <div class="d4-ex">${esc(r.ex)}</div>
+          <div class="d4-qty">${bar(nw)}<span>${qty}</span></div>
+        </div>`;
+    };
+    const line = (t) => `<div class="d4-line"><span>${t}</span></div>`;
+    // 危険等級ごとにまとめ、左に等級の帯、右に品名を縦に並べる（境目の引火点は線で示す）
+    const rows = [1, 2, 3]
+      .map((g) => {
+        const group = ROWS.filter((x) => x.grade === g);
+        const inner = group.map((r, k) => cell(r) + (r.line && k < group.length - 1 ? line(r.line) : '')).join('');
+        const last = group[group.length - 1];
+        return `<div class="d4-group"><div class="d4-grade g${g}"><span>危険等級</span><b>${roman[g]}</b></div><div class="d4-col">${inner}</div></div>${last.line ? line(last.line) : ''}`;
+      })
+      .join('');
+    return `<div class="d4">
+      <div class="d4-head"><span>↑ 引火点が低い（危険）</span><span>指定数量が少ない</span></div>
+      <div class="d4-grid">${rows}</div>
+      <div class="d4-head"><span>↓ 引火点が高い</span><span>指定数量が多い</span></div>
+      <div class="d4-memo">
+        <div><b>境目の引火点</b>「<b>21・70・200・250</b>」（ニイイチ・ナナジュウ・ニヒャク・ニヒャクゴジュウ）</div>
+        <div><b>指定数量</b>は上から「<b>50・200・400・1000・2000・6000・1万</b>」。<b>水溶性は2倍</b>になるのは第1〜第3石油類だけ</div>
+        <div><b>危険等級</b>は「<b>特殊だけⅠ、1石とアルコールがⅡ、残りは全部Ⅲ</b>」</div>
+        <div>アルコール類は水溶性でも非水溶性でも<b>400L</b>（第1石油類の水溶性と同じ）</div>
+      </div>
+    </div>`;
   }
   function substanceTable(group) {
     const subs = O.SUBSTANCES.filter((s) => s.g === group);
@@ -435,6 +485,7 @@
       <header class="bar"><button class="icon-btn" data-act="home" aria-label="戻る">←</button><div class="bar-title">暗記ノート</div><div></div></header>
       <main class="wrap">
         <input class="search" type="search" placeholder="キーワードで絞り込み（例: 引火点、移動タンク）" value="${esc(S.notesFilter)}" data-act="filter">
+        ${f ? '' : `<details class="nt" open><summary>第4類 早見図（品名・引火点・危険等級・指定数量）</summary>${dai4Chart()}</details>`}
         ${sections}
         ${subIds.length ? `<h3 class="sec-h">物品カード</h3>${subIds.map((id) => `<details class="nt" ${f ? 'open' : ''}><summary>${esc(O.NOTES[id].title)}</summary>${renderBody(O.NOTES[id].body)}</details>`).join('')}` : ''}
         ${!sections && !subIds.length ? '<p class="muted center">該当する項目がありません。</p>' : ''}
