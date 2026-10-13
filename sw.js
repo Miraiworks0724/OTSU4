@@ -1,5 +1,5 @@
 /* オフライン対応（ネットワーク優先・失敗時はキャッシュ） */
-const CACHE = 'otsu4-v4';
+const CACHE = 'otsu4-v5';
 const FILES = [
   './',
   'index.html',
