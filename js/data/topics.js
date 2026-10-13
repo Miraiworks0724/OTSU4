@@ -55,7 +55,7 @@
     s_dai1: ['seishou', '第1石油類', 5],
     s_alcohol: ['seishou', 'アルコール類', 4],
     s_dai2: ['seishou', '第2石油類', 4],
-    s_dai3: ['seishou', '第3・第4石油類・動植物油類', 4],
+    s_dai3: ['seishou', '第3・第4石油類・動植物油類', 5],
     s_jiko: ['seishou', '事故事例と防止対策', 3],
   };
   O.TOPICS = {};
