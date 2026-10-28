@@ -13,7 +13,8 @@
     let pool = all.filter((p) => !avoid || !avoid.has(p.id));
     if (!pool.length) pool = all;
     for (let i = 0; i < 8; i++) {
-      const p = O.weightedPick(pool, (x) => x.w);
+      O.pickStyle();
+      const p = O.weightedPick(pool, O.providerWeight);
       try {
         return p.make();
       } catch (e) {
@@ -95,7 +96,8 @@
             // 出題パターンの決定: この試験での使用回数が最も少ないものから（pass 2 以降は制限をゆるめる）
             const pool = pass === 0 ? provs.filter((p) => !pUse[p.id]) : minBy(provs.map((p) => p.id), pUse).map((id) => provs.find((p) => p.id === id));
             for (let i = 0; i < 12 && pool.length && !q; i++) {
-              const p = O.weightedPick(pool, (x) => x.w);
+              O.pickStyle();
+              const p = O.weightedPick(pool, O.providerWeight);
               let c;
               try {
                 c = p.make();

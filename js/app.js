@@ -24,21 +24,14 @@
     ['b', '参考書例題「乙4すい〜っと合格」'],
   ];
   const SRC_SHORT = { o: '公式', b: '参考書' };
-  const srcSummary = (list) => (list.length ? list.map((x) => SRC_SHORT[x]).join('＋') + 'の分析から作った問題だけを出題' : 'チェックなし: 一般的な知識（Claudeが作成）から出題');
-  /* 選んだ媒体だけでは35問を別々の出題パターンで組めないときの注意書き */
-  function coverageNote(list) {
-    O.setSources(list);
-    const low = O.examCoverage().filter((c) => c.patterns < c.need);
-    if (!low.length) return '';
-    return `<p class="small warn-note">この組合せでは出題パターンが少ないため、${low
-      .map((c) => `${O.SUBJECTS[c.subj].short}（${c.need}問に対し${c.patterns}種類）`)
-      .join('、')}で同じ形式の問題がくり返し出ます。公式に公開されている過去問は1回分だけなので、参考書例題と一緒にチェックするのがおすすめです。</p>`;
-  }
+  const srcSummary = (list) =>
+    (list.length ? list.map((x) => SRC_SHORT[x]).join('・') + 'の問い方・選択肢の作り方をまねて出題' + (list.length > 1 ? '（1問ごとにどちらかの形式）' : '') : 'チェックなし: アプリ標準の問い方で出題') +
+    '。出題する分野・内容はいつも全分野からまんべんなく選びます。';
   function sourceBox(key) {
     const list = store.data.settings[key];
-    return `<fieldset class="srcbox"><legend>参照する媒体</legend>${SOURCES.map(
+    return `<fieldset class="srcbox"><legend>参照する媒体（出題形式）</legend>${SOURCES.map(
       ([id, label]) => `<label class="check"><input type="checkbox" data-act="src" data-key="${key}" data-src="${id}" ${list.includes(id) ? 'checked' : ''}><span>${esc(label)}</span></label>`
-    ).join('')}<p class="muted small">${esc(srcSummary(list))}</p>${key === 'srcExam' ? coverageNote(list) : ''}</fieldset>`;
+    ).join('')}<p class="muted small">${esc(srcSummary(list))}</p></fieldset>`;
   }
   const pct = (c, n) => (n ? Math.round((c / n) * 100) : 0);
 
@@ -184,7 +177,7 @@
 
   function questionBody(q) {
     const topic = O.TOPICS[q.topic];
-    let html = `<div class="badges"><span class="badge ${q.subject}">${esc(O.SUBJECTS[q.subject].short)}</span><span class="badge ghost">${esc(topic.name)}</span>${(q.src || '').split('').filter((x) => SRC_SHORT[x]).map((x) => `<span class="badge src">${SRC_SHORT[x]}</span>`).join('')}<span class="badge freq" title="出題頻度: ${O.FREQ_LABELS[topic.freq]}">${O.stars(topic.freq)}</span></div>`;
+    let html = `<div class="badges"><span class="badge ${q.subject}">${esc(O.SUBJECTS[q.subject].short)}</span><span class="badge ghost">${esc(topic.name)}</span>${q.style && O.STYLE_LABEL[q.style] ? `<span class="badge src">${O.STYLE_LABEL[q.style]}</span>` : ''}<span class="badge freq" title="出題頻度: ${O.FREQ_LABELS[topic.freq]}">${O.stars(topic.freq)}</span></div>`;
     html += `<p class="stem">${esc(q.stem)}</p>`;
     if (q.list) html += `<ol class="stmts">${q.list.map((s) => `<li><b>${s.label}</b><span>${esc(s.t)}</span></li>`).join('')}</ol>`;
     return html;
@@ -542,7 +535,7 @@
               ? `<ul class="hist">${d.history
                   .map((h) => {
                     const dt = new Date(h.at);
-                    return `<li><span class="tag ${h.pass ? 'ok' : 'ng'}">${h.pass ? '合格' : '不合格'}</span><span>${dt.getMonth() + 1}/${dt.getDate()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}</span><span class="muted">${O.SUBJECT_ORDER.map((s) => `${O.SUBJECTS[s].short} ${h.subjects[s].c}/${h.subjects[s].n}`).join('・')}</span><span class="muted small">${h.srcs && h.srcs.length ? h.srcs.map((x) => SRC_SHORT[x]).join('＋') : '一般知識'}</span></li>`;
+                    return `<li><span class="tag ${h.pass ? 'ok' : 'ng'}">${h.pass ? '合格' : '不合格'}</span><span>${dt.getMonth() + 1}/${dt.getDate()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}</span><span class="muted">${O.SUBJECT_ORDER.map((s) => `${O.SUBJECTS[s].short} ${h.subjects[s].c}/${h.subjects[s].n}`).join('・')}</span><span class="muted small">${h.srcs && h.srcs.length ? h.srcs.map((x) => SRC_SHORT[x]).join('＋') : '標準形式'}</span></li>`;
                   })
                   .join('')}</ul>`
               : '<p class="muted">まだ受験していません。</p>'

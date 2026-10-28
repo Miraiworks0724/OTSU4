@@ -123,50 +123,44 @@ Object.values(O.TOPICS).forEach((t) => {
   }
 });
 
-// 7. 参照する媒体（出典）ごとの出題
+// 7. 参照する媒体（出題スタイル）ごとの出題
+//    媒体は問い方だけを変え、内容は常に全分野からまんべんなく出ること
+const fmtOf = {};
+O.PROVIDERS.forEach((p) => (fmtOf[p.id] = p.fmt));
 [[], ['o'], ['b'], ['o', 'b']].forEach((srcs) => {
   O.setSources(srcs);
-  const allowed = (x) => (x ? srcs.includes(x) : srcs.length === 0);
-  O.PROVIDERS.filter(O.providerAvailable).forEach((p) => {
-    for (let i = 0; i < 40; i++) {
-      let q;
-      try {
-        q = p.make();
-      } catch (e) {
-        fail(`src ${srcs}: ${p.id}: ${e.message}`);
-        break;
-      }
-      (q.src || '').split('').forEach((c) => {
-        if (!srcs.includes(c)) fail(`src ${srcs}: ${p.id} produced src ${q.src}`);
-      });
-      if (!srcs.length && q.src) fail(`base mode produced src ${q.src} from ${p.id}`);
-      if (srcs.length && !q.src) fail(`src ${srcs}: ${p.id} produced base question`);
-    }
+  Object.keys(O.TOPICS).forEach((t) => {
+    if (!O.topicAvailable(t)) fail(`style ${srcs}: topic ${t} unavailable`);
   });
-  for (let i = 0; i < 30; i++) {
+  const fmtCount = {};
+  for (let i = 0; i < 60; i++) {
     let qs;
     try {
       qs = O.buildExam();
     } catch (e) {
-      fail(`src ${srcs}: exam ${e.message}`);
+      fail(`style ${srcs}: exam ${e.message}`);
       break;
     }
-    if (qs.length !== 35) fail(`src ${srcs}: exam length`);
-    // 媒体の出題パターンが足りている科目では、同じパターンを2回使わない
-    O.examCoverage().forEach((c) => {
-      if (c.patterns < c.need) return;
-      const ids = qs.filter((q) => q.subject === c.subj).map((q) => q.pid);
-      if (new Set(ids).size !== ids.length) fail(`src ${srcs}: ${c.subj} repeats a pattern`);
-      const topics = qs.filter((q) => q.subject === c.subj).map((q) => q.topic);
+    if (qs.length !== 35) fail(`style ${srcs}: exam length`);
+    qs.forEach((q) => {
+      if (srcs.length ? !srcs.includes(q.style) : q.style) fail(`style ${srcs}: question style ${q.style}`);
+      const f = q.list && q.choices[0].t.endsWith('つ') ? 'count' : fmtOf[q.pid];
+      fmtCount[f] = (fmtCount[f] || 0) + 1;
+    });
+    O.SUBJECT_ORDER.forEach((subj) => {
+      const sq = qs.filter((q) => q.subject === subj);
+      if (new Set(sq.map((q) => q.pid)).size !== sq.length) fail(`style ${srcs}: ${subj} repeats a pattern`);
+      const topics = sq.map((q) => q.topic);
       const maxSame = Math.max(...topics.map((t) => topics.filter((x) => x === t).length));
-      if (maxSame > Math.ceil(c.need / c.topics)) fail(`src ${srcs}: ${c.subj} same topic ${maxSame} times`);
+      if (maxSame > 2) fail(`style ${srcs}: ${subj} same topic ${maxSame} times`);
     });
   }
   for (let i = 0; i < 100; i++) {
     const q = O.nextPractice({ subject: 'all', weak: false, minFreq: 1, recentPids: [], recentSigs: [] });
-    if (!q) fail(`src ${srcs}: practice null`);
+    if (!q) fail(`style ${srcs}: practice null`);
   }
-  void allowed;
+  const tot = Object.values(fmtCount).reduce((a, b) => a + b, 0);
+  console.log(`style ${JSON.stringify(srcs)}: ` + Object.keys(fmtCount).sort().map((k) => `${k} ${Math.round((fmtCount[k] / tot) * 100)}%`).join(' '));
 });
 O.setSources([]);
 

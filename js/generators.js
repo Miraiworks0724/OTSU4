@@ -12,17 +12,34 @@
   const reg = (p) => P.push(Object.assign({ w: 1 }, p));
 
   /*
-   * 出典（参照する媒体）の切り替え
-   *  src: 'o' = 公式過去問の分析から / 'b' = 参考書例題の分析から / なし = 一般的な知識から
-   *  O.SRC.allow が空ならば一般的な知識のみ、そうでなければチェックした媒体のものだけを出題する。
+   * 参照する媒体（出題スタイル）
+   *  媒体のチェックは「出す内容」ではなく「問い方・選択肢の作り方」を切り替える。
+   *  出題する内容（分野・知識）は、どの設定でも全分野・全記述からまんべんなく選ぶ。
+   *   o = 公式過去問題の出題形式をまねる / b = 参考書例題の出題形式をまねる / なし = このアプリ標準の混ぜ方
+   *  両方チェックしたときは、1問ごとにどちらかのスタイルを選ぶ。
+   *  （記述や出題パターンに付いている src は「どの媒体の分析で追加したか」の記録として残している）
    */
-  O.SRC = { allow: new Set() };
-  const okSrc = (src) => (src ? O.SRC.allow.has(src) : O.SRC.allow.size === 0);
-  O.okSrc = okSrc;
+  O.STYLE = { list: [], cur: null };
   O.setSources = (list) => {
-    O.SRC.allow = new Set(list || []);
+    O.STYLE.list = (list || []).slice();
   };
-  const SUBS = () => O.SUBSTANCES.filter((x) => !x.src || okSrc(x.src));
+  O.pickStyle = () => (O.STYLE.cur = O.STYLE.list.length ? pick(O.STYLE.list) : null);
+  const okSrc = () => true;
+  O.okSrc = okSrc;
+  const SUBS = () => O.SUBSTANCES;
+  /*
+   * 出題形式ごとの出やすさ
+   *  公式: 公開問題35問の形式の内訳（「誤っているもの」が過半、「正しいもの」「組合せ」「該当するもの」「〜のみの組合せ」、
+   *        A〜Dのすべてを掲げる形式・【　】の穴埋め・計算が少し）
+   *  参考書: 「いくつあるか」「穴埋め」「並び順」「計算」が多い
+   */
+  const STYLE_W = {
+    o: { stmt: 3, set: 5, pair: 4, comboList: 20, blank: 25, calc: 3, order: 0.5, countList: 0.2, modes: { neg: 12, pos: 1, combo: 2, count: 0.2 } },
+    b: { stmt: 3.5, set: 4, pair: 4, comboList: 5, blank: 7, calc: 3, order: 3, countList: 7, modes: { neg: 5, pos: 4, combo: 1, count: 4 } },
+  };
+  O.STYLE_LABEL = { o: '公式形式', b: '参考書形式' };
+  /** 出題パターンを選ぶときの重み（内容の重み × 現在のスタイルでの形式の出やすさ） */
+  O.providerWeight = (p) => p.w * (O.STYLE.cur ? STYLE_W[O.STYLE.cur][p.fmt] || 1 : 1);
   const fmtL = (n) => n.toLocaleString('ja-JP') + 'L';
 
   /* ───────── 問題オブジェクトを組み立てる ───────── */
@@ -45,6 +62,7 @@
       exp: o.exp || '',
       notes: O.uniq([p.topic].concat(o.notes || [])),
       src: o.src || p.src || '',
+      style: O.STYLE.cur || '',
     };
     q.sig = O.hash(q.stem + '|' + (q.list ? q.list.map((x) => x.t).join('|') : '') + '|' + choices.map((c) => c.t).sort().join('|'));
     return q;
@@ -84,6 +102,11 @@
 
   /** 正誤問題（誤っているもの／正しいもの／いくつあるか） */
   function statementQuestion(p, items, stemHead, mode, extraNotes, exp) {
+    // 公式の「性質・消火」では「妥当でないもの／妥当なもの」という問い方も使われる
+    const seishou = O.TOPICS[p.topic] && O.TOPICS[p.topic].subject === 'seishou';
+    const datou = O.STYLE.cur === 'o' && seishou && Math.random() < 0.4;
+    const W_NG = datou ? '妥当でないもの' : '誤っているもの';
+    const W_OK = datou ? '妥当なもの' : '正しいもの';
     if (mode === 'combo') {
       // 本試験の「A〜Dのうち、誤っているもののみをすべて掲げているものはどれか」形式
       const askFalse = Math.random() < 0.6;
@@ -99,7 +122,7 @@
         for (let m = 1; m < 16; m++) subsets.push(labels.filter((_, i) => m & (1 << i)));
         const others = shuffle(subsets.filter((a) => key(a) !== key(target))).sort((a, b) => Math.abs(a.length - target.length) - Math.abs(b.length - target.length));
         const opts = [target].concat(others.slice(0, 4)).sort((a, b) => (key(a) < key(b) ? -1 : 1));
-        const word = askFalse ? '誤っているもの' : '正しいもの';
+        const word = askFalse ? W_NG : W_OK;
         return build(p, {
           src: srcOf(sel),
           stem: `${stemHead}、次のA〜Dのうち、${word}のみをすべて掲げているものはどれか。`,
@@ -114,7 +137,9 @@
     }
     if (mode === 'count') {
       const askTrue = Math.random() < 0.6;
-      for (const k of shuffle([1, 2, 3, 4])) {
+      // 参考書の「いくつあるか」は「0（すべて誤り）」を選択肢に含むことがある
+      const zeroOpt = O.STYLE.cur === 'b' && askTrue && Math.random() < 0.5;
+      for (const k of shuffle(zeroOpt ? [0, 1, 2, 3, 4] : [1, 2, 3, 4])) {
         const nTrue = askTrue ? k : 5 - k;
         const sel = selectStatements(items, nTrue, 5 - nTrue);
         if (!sel) continue;
@@ -123,11 +148,11 @@
         const ans = askTrue ? nTrue : 5 - nTrue;
         return build(p, {
           src: srcOf(sel),
-          stem: `${stemHead}、次のA〜Eのうち、${askTrue ? '正しいもの' : '誤っているもの'}はいくつあるか。`,
+          stem: `${stemHead}、次のA〜Eのうち、${askTrue ? W_OK : W_NG}はいくつあるか。`,
           list,
           order: 'fixed',
-          choices: [1, 2, 3, 4, 5].map((n) => ({ t: `${n}つ`, ok: n === ans })),
-          exp: `${askTrue ? '正しいもの' : '誤っているもの'}は ${list.filter((x) => x.ok === askTrue).map((x) => x.label).join('・')} の${ans}つ。` + (exp ? '\n' + exp : ''),
+          choices: (zeroOpt ? [1, 2, 3, 4, 0] : [1, 2, 3, 4, 5]).map((n) => ({ t: n ? `${n}つ` : '0（すべて誤り）', ok: n === ans })),
+          exp: ans ? `${askTrue ? W_OK : W_NG}は ${list.filter((x) => x.ok === askTrue).map((x) => x.label).join('・')} の${ans}つ。` + (exp ? '\n' + exp : '') : 'すべて誤り。' + (exp ? '\n' + exp : ''),
           notes: extraNotes,
         });
       }
@@ -138,7 +163,7 @@
     if (!sel) throw new Error('not enough statements: ' + p.id);
     return build(p, {
       src: srcOf(sel),
-      stem: `${stemHead}、次のうち${neg ? '誤っているもの' : '正しいもの'}はどれか。`,
+      stem: `${stemHead}、次のうち${neg ? W_NG : W_OK}はどれか。`,
       choices: sel.map((s) => ({ t: s.t, ok: neg ? !s.ok : s.ok, mk: s.ok ? '○' : '×', why: stmtWhy(s) })),
       notes: extraNotes,
       exp,
@@ -154,11 +179,11 @@
     if (items.length >= 5 && (ok(2, 2) || ok(3, 1) || ok(1, 3))) m.push(['combo', 1.5]);
     return m;
   }
-  const chooseMode = (modes) => O.weightedPick(modes, (m) => m[1])[0];
+  const chooseMode = (modes) => O.weightedPick(modes, (m) => (O.STYLE.cur ? STYLE_W[O.STYLE.cur].modes[m[0]] || 1 : m[1]))[0];
 
   /* ───────── 1. 正誤問題バンク ───────── */
   /* 出典で絞り込んだ記述と、そのとき使える出題形式（出典の組合せごとにキャッシュ） */
-  const srcKey = () => Array.from(O.SRC.allow).sort().join('') || '-';
+  const srcKey = () => 'all'; // 内容は媒体の設定によらず常に全記述から
   function filteredItems(cache, items) {
     const key = srcKey();
     if (!cache[key]) {
@@ -251,6 +276,7 @@
   /* ───────── 3.「該当するもの／しないもの」問題 ───────── */
   function regSet(d) {
     reg({
+      fmt: 'set',
       id: d.id,
       topic: d.topic,
       w: d.w || 2,
@@ -280,6 +306,7 @@
   /* ───────── 4.「組合せ」問題 ───────── */
   function regPair(d) {
     reg({
+      fmt: 'pair',
       id: d.id,
       topic: d.topic,
       w: d.w || 2,
@@ -314,6 +341,7 @@
   /* ───────── 5. 並べ替え（最も高い／低い）問題 ───────── */
   function regOrder(d) {
     reg({
+      fmt: 'order',
       id: d.id,
       topic: d.topic,
       w: d.w || 2,
@@ -370,6 +398,7 @@
   /* ───────── 6.「すべて該当する組合せ」問題（本試験の「〜のみの組合せとして正しいもの」形式） ───────── */
   function regCombo(d) {
     reg({
+      fmt: 'comboList',
       id: d.id,
       topic: d.topic,
       w: d.w || 2,
@@ -561,6 +590,7 @@
   /* 「次のうち〜ものはいくつあるか」（物品名を並べて数える形式） */
   function regCountList(d) {
     reg({
+      fmt: 'countList',
       id: d.id,
       topic: d.topic,
       w: d.w || 2,
@@ -590,6 +620,7 @@
   /* 「次の文の【①】〜【③】に当てはまる語句の組合せ」（穴埋め形式） */
   function regBlank(d) {
     reg({
+      fmt: 'blank',
       id: d.id,
       topic: d.topic,
       w: d.w || 2,
@@ -1614,6 +1645,15 @@
       p.src = src;
     })
   );
+  /* 出題形式の分類（スタイルの重み付けに使う） */
+  const FMT_OVERRIDE = {
+    g_aru: 'stmt', g_menjo_shinsei: 'pair', g_self_color: 'set', g_nensho_jouken: 'pair', g_inka_temp: 'set', g_inka_hani2: 'pair',
+    g_moeyasui: 'pair', g_jotai_temp: 'pair', g_kitai_hiju: 'set', g_hani: 'set', g_baisu_add: 'set', g_koshu: 'set', ord_seq_fp: 'order',
+  };
+  P.forEach((p) => {
+    if (FMT_OVERRIDE[p.id]) p.fmt = FMT_OVERRIDE[p.id];
+    if (!p.fmt) p.fmt = /^(hb_|bb_|sb_|sub_)/.test(p.id) ? 'stmt' : 'calc';
+  });
   /** 現在の出典設定でこのプロバイダーが使えるか */
   O.providerAvailable = (p) => (p.available ? p.available() : okSrc(p.src));
 })();
