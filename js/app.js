@@ -25,11 +25,20 @@
   ];
   const SRC_SHORT = { o: '公式', b: '参考書' };
   const srcSummary = (list) => (list.length ? list.map((x) => SRC_SHORT[x]).join('＋') + 'の分析から作った問題だけを出題' : 'チェックなし: 一般的な知識（Claudeが作成）から出題');
+  /* 選んだ媒体だけでは35問を別々の出題パターンで組めないときの注意書き */
+  function coverageNote(list) {
+    O.setSources(list);
+    const low = O.examCoverage().filter((c) => c.patterns < c.need);
+    if (!low.length) return '';
+    return `<p class="small warn-note">この組合せでは出題パターンが少ないため、${low
+      .map((c) => `${O.SUBJECTS[c.subj].short}（${c.need}問に対し${c.patterns}種類）`)
+      .join('、')}で同じ形式の問題がくり返し出ます。公式に公開されている過去問は1回分だけなので、参考書例題と一緒にチェックするのがおすすめです。</p>`;
+  }
   function sourceBox(key) {
     const list = store.data.settings[key];
     return `<fieldset class="srcbox"><legend>参照する媒体</legend>${SOURCES.map(
       ([id, label]) => `<label class="check"><input type="checkbox" data-act="src" data-key="${key}" data-src="${id}" ${list.includes(id) ? 'checked' : ''}><span>${esc(label)}</span></label>`
-    ).join('')}<p class="muted small">${esc(srcSummary(list))}</p></fieldset>`;
+    ).join('')}<p class="muted small">${esc(srcSummary(list))}</p>${key === 'srcExam' ? coverageNote(list) : ''}</fieldset>`;
   }
   const pct = (c, n) => (n ? Math.round((c / n) * 100) : 0);
 

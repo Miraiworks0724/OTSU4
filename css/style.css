@@ -392,3 +392,4 @@ table.stats td.stars { font-size: 0.75rem; }
 .d4-line span { position: absolute; right: 0; top: -0.75rem; background: var(--bg); padding: 0 6px; font-weight: 800; font-size: 0.8rem; }
 .note .d4-line span, .nt .d4-line span { background: var(--card); }
 .d4-memo { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 0.85rem; display: grid; gap: 4px; }
+.warn-note { color: var(--ng); background: var(--ng-soft); border-radius: 8px; padding: 6px 8px; margin: 6px 0 4px; }

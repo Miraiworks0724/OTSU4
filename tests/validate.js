@@ -152,6 +152,15 @@ Object.values(O.TOPICS).forEach((t) => {
       break;
     }
     if (qs.length !== 35) fail(`src ${srcs}: exam length`);
+    // 媒体の出題パターンが足りている科目では、同じパターンを2回使わない
+    O.examCoverage().forEach((c) => {
+      if (c.patterns < c.need) return;
+      const ids = qs.filter((q) => q.subject === c.subj).map((q) => q.pid);
+      if (new Set(ids).size !== ids.length) fail(`src ${srcs}: ${c.subj} repeats a pattern`);
+      const topics = qs.filter((q) => q.subject === c.subj).map((q) => q.topic);
+      const maxSame = Math.max(...topics.map((t) => topics.filter((x) => x === t).length));
+      if (maxSame > Math.ceil(c.need / c.topics)) fail(`src ${srcs}: ${c.subj} same topic ${maxSame} times`);
+    });
   }
   for (let i = 0; i < 100; i++) {
     const q = O.nextPractice({ subject: 'all', weak: false, minFreq: 1, recentPids: [], recentSigs: [] });
